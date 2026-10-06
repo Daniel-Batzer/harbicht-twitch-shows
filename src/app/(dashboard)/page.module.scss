@@ -1,0 +1,33 @@
+@use "../../styles/tokens" as *;
+
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 32px;
+  text-align: center;
+}
+
+.title {
+  font-size: 48px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: $color-gold;
+  text-shadow: $glow-gold;
+}
+
+.links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.link {
+  padding: 14px 28px;
+  border-radius: $radius-pill;
+  background: $color-night-raised;
+  border: 3px solid $color-gold;
+  font-weight: 800;
+  text-decoration: none;
+}

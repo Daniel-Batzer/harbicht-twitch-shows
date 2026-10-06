@@ -1,0 +1,16 @@
+.stage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: center;
+  overflow: hidden;
+}
+
+.round {
+  height: 100%;
+  padding: 120px 96px 96px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+}

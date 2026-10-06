@@ -1183,6 +1183,38 @@ Avoid:
 
 ---
 
+# Decision 041 – Temporary In-Memory Game State and Overlay Polling
+
+## Status
+
+Accepted – **temporary**. To be replaced when realtime requirements justify a transport decision (Decision 026, Roadmap Phase 11).
+
+## Decision
+
+For the first local slices, the current game state lives in server memory, and the OBS overlay polls it.
+
+- `src/features/game/services/game-store.ts` keeps the single current `GameState` on `globalThis`. That file is the only place that touches the global.
+- The host changes state through Server Actions (`src/app/(dashboard)/host/actions.ts`).
+- The overlay reads a plain JSON `GameSnapshot` from `GET /api/game/state` about once per second (`usePolledGameSnapshot`).
+
+## Reason
+
+- The OBS browser source runs in its own browser process. Browser-only sharing (`localStorage`, `BroadcastChannel`, React state) cannot reach it, so the state has to live on the server.
+- Polling needs no new dependency and does not prejudge the transport choice in Decision 026.
+- `globalThis` is used instead of a module-level variable because, in `next dev`, Route Handlers and Server Actions can be bundled as separate module instances, and HMR re-evaluates modules.
+
+## Consequences
+
+- State is lost when the server restarts. There is one game per server process, and it is not safe across multiple instances.
+- Overlay updates arrive with roughly 1 second of latency. That is acceptable for showing a question, but not for live vote feedback.
+- Pages that read this state must opt out of prerendering. `/host` does this with `await connection()`.
+
+## Replacement Path
+
+Only the transport changes: `usePolledGameSnapshot` and `/api/game/state`. The domain, the service, the `GameSnapshot` contract and the components stay as they are. Persistence (Phase 7) replaces `game-store.ts`.
+
+---
+
 # Open Decisions
 
 The following are intentionally unresolved:

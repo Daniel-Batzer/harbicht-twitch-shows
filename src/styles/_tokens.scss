@@ -1,0 +1,20 @@
+// Shared game show design tokens. Provisional: the full visual direction is
+// revisited in the gameshow design/polish phase (Phase 4).
+
+$color-night: #12062b;
+$color-night-raised: #1f0d47;
+$color-ink: #fff8e7;
+$color-ink-muted: #c9b8ff;
+$color-gold: #ffd23f;
+
+// One color per answer slot; the UI is tuned for three options and cycles
+// through these when a question has more.
+$answer-slot-colors: (#ff3d7f, #2ee6d6, #ffb627);
+
+$radius-card: 28px;
+$radius-pill: 999px;
+
+$glow-gold: 0 0 24px rgba(255, 210, 63, 0.55), 0 0 64px rgba(255, 210, 63, 0.25);
+$shadow-card: 0 14px 0 rgba(0, 0, 0, 0.35), 0 24px 48px rgba(0, 0, 0, 0.45);
+
+$font-body: var(--font-geist-sans), system-ui, sans-serif;

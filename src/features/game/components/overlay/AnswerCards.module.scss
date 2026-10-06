@@ -1,0 +1,75 @@
+@use "sass:list";
+@use "../../../../styles/tokens" as *;
+
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(120px) scale(0.7);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(-10px) scale(1.04);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.cards {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 48px;
+  list-style: none;
+}
+
+.card {
+  --slot-color: #{list.nth($answer-slot-colors, 1)};
+
+  position: relative;
+  flex: 1 1 0;
+  max-width: 540px;
+  min-height: 300px;
+  padding: 72px 36px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: $radius-card;
+  background: var(--slot-color);
+  box-shadow: 0 0 40px color-mix(in srgb, var(--slot-color) 60%, transparent), $shadow-card;
+  color: $color-night;
+  font-family: $font-body;
+  text-align: center;
+  animation: pop-in 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  // Stagger after the question card has landed.
+  animation-delay: calc(450ms + var(--slot-index, 0) * 140ms);
+
+  @for $slot from 1 through list.length($answer-slot-colors) {
+    &[data-slot="#{$slot}"] {
+      --slot-color: #{list.nth($answer-slot-colors, $slot)};
+    }
+  }
+}
+
+.badge {
+  position: absolute;
+  top: -36px;
+  left: 50%;
+  width: 80px;
+  height: 80px;
+  display: grid;
+  place-items: center;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: $color-night;
+  border: 6px solid var(--slot-color);
+  color: $color-ink;
+  font-size: 44px;
+  font-weight: 900;
+}
+
+.label {
+  font-size: 44px;
+  font-weight: 900;
+  line-height: 1.15;
+}
