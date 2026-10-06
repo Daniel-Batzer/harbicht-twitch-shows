@@ -64,3 +64,14 @@ SCSS Modules + Motion. **Tailwind is intentionally not used, so do not add it.**
 - Prefer explicit, readable code over clever code: descriptive names, small modules, explicit state transitions, no opaque type gymnastics or hidden global state. The developer is an experienced React/TS dev who reviews all generated code.
 - For framework/library APIs that may have changed (Next.js 16, Motion, Prisma, Twitch libs), check current docs (`node_modules/next/dist/docs/`, Context7 when configured) instead of relying on memory.
 - Never put secrets in source, docs, or committed `.env` files. `.env*` is gitignored. Don't log OAuth tokens.
+
+- **Real environment files are human-owned.** Never read, create, edit, overwrite,
+  delete, or print `.env`, `.env.local`, `.env.development`, `.env.production`,
+  or other secret-bearing environment files.
+- Claude may update `.env.example`, but it must contain placeholders and safe
+  defaults only, never real credentials or tokens.
+- When a new environment variable is required, update `.env.example` and tell
+  the developer exactly which value must be added to their local environment.
+- Do not inspect environment files to determine whether a secret already exists.
+  Ask the developer or check only whether the variable is present in the process
+  environment without printing its value.
