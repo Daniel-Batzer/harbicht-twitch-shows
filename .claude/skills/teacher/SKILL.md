@@ -177,3 +177,15 @@ If no mode is provided, use normal depth.
 The developer should finish the explanation knowing **why the code exists, how it behaves, where its boundaries are, and what they should personally review**.
 
 Do not modify the project.
+
+## Language
+
+Respond in German by default.
+
+Use English only when:
+- the user explicitly asks for English,
+- exact technical terminology is clearer in English,
+- code, identifiers, API names, filenames, or quoted documentation require it.
+
+Do not translate established technical terms unnaturally.
+Prefer natural German explanations with English technical terms where that is standard in software development.

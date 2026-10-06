@@ -63,7 +63,7 @@ SCSS Modules + Motion. **Tailwind is intentionally not used, so do not add it.**
 - **Do not silently add major dependencies or layers** (Prisma, Docker, Redis, XState, Zustand, Socket.IO/WebSockets, auth frameworks, monorepo tooling, workers, test frameworks). First answer: what current problem it solves, why the existing approach is insufficient, what complexity it adds, the alternatives, and how reversible it is. Then let the developer decide.
 - Prefer explicit, readable code over clever code: descriptive names, small modules, explicit state transitions, no opaque type gymnastics or hidden global state. The developer is an experienced React/TS dev who reviews all generated code.
 - For framework/library APIs that may have changed (Next.js 16, Motion, Prisma, Twitch libs), check current docs (`node_modules/next/dist/docs/`, Context7 when configured) instead of relying on memory.
-- Never put secrets in source, docs, or committed `.env` files. `.env*` is gitignored. Don't log OAuth tokens.
+- Never put secrets in source, docs, or committed `.env` files. `.env` and `.env.*` are gitignored (except `.env.example`). Don't log OAuth tokens.
 
 - **Real environment files are human-owned.** Never read, create, edit, overwrite,
   delete, or print `.env`, `.env.local`, `.env.development`, `.env.production`,
@@ -75,3 +75,8 @@ SCSS Modules + Motion. **Tailwind is intentionally not used, so do not add it.**
 - Do not inspect environment files to determine whether a secret already exists.
   Ask the developer or check only whether the variable is present in the process
   environment without printing its value.
+- Enforced by `permissions.deny` in `.claude/settings.json` plus the PreToolUse hook
+  `.claude/hooks/protect-env-files.mjs` (protects `.env` and `.env.*`, allows
+  `.env.example`; `.envrc` is not covered). If blocked, ask the developer instead
+  of finding a workaround. If a filesystem-capable MCP server is added, extend the
+  hook matcher.
