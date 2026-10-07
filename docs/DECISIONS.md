@@ -1215,6 +1215,46 @@ Only the transport changes: `usePolledGameSnapshot` and `/api/game/state`. The d
 
 ---
 
+# Decision 042 – Phase 2 Game Flow
+
+## Status
+
+Accepted
+
+## Decision
+
+The game flow is implemented as plain, pure transition functions in `src/features/game/domain/game-state.ts` (no state-machine library, Decision 028).
+
+States:
+
+```text
+IDLE → INTRO → VOTING → LOCKED → REVEAL → RESULT ─┬→ INTRO (next round)
+                                                  └→ FINISHED
+END_GAME: any running state (including FINISHED) → IDLE
+```
+
+- **PREPARE is deferred.** It gets a real purpose once deck or round-count selection exists.
+- **Host commands:** `START_GAME`, `OPEN_VOTING`, `LOCK_VOTING`, `REVEAL_RESULT`, `SHOW_RESULT`, `START_NEXT_ROUND`, `FINISH_GAME`, `END_GAME`. `getAvailableCommands(state)` is the readable transition table. A test checks that it agrees with the guards of the transition functions.
+- **Invalid commands** return `INVALID_TRANSITION` (with command and current status) and leave the state unchanged.
+- **One Server Action** receives the command as a form field and validates it with Zod (Decision 029). An unknown command is a boundary failure (`UNKNOWN_COMMAND`) and never reaches the domain.
+- **Session length:** a session has `totalRounds` (positive integer, default 5, set by the service, not hard-coded in the domain). After the last round only Finish/End are possible. The host can finish early after any round's result.
+- **No repeated questions within a session.** This is a minimal version pulled forward from Phase 8: the session tracks `playedQuestionIds`, and starting fails with `NOT_ENOUGH_QUESTIONS` if the deck is smaller than `totalRounds`.
+- **REVEAL → RESULT is a manual host step for now.** It may become automatic with the reveal sequence (Phase 4).
+- **Answers are hidden during INTRO** (ARCHITECTURE §22). Answer cards appear when voting opens.
+
+## Reason
+
+- The roadmap requires explicit transitions, multiple rounds, a clean end, and testable logic. Eight commands over seven states are easy to read as plain switch statements, so a library would add more than it saves.
+- Without the no-repeat rule, a 5-round session over the 6-question fixture deck would repeat a question about 91% of the time.
+
+## Revisit When
+
+- PREPARE has real content (deck or round-count choice).
+- Timers (Phase 6) or reveal choreography (Phase 4) add automatic transitions.
+- Votes (Phase 3) need a round history beyond `playedQuestionIds`.
+
+---
+
 # Open Decisions
 
 The following are intentionally unresolved:

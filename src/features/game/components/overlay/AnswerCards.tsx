@@ -4,13 +4,15 @@ import styles from "./AnswerCards.module.scss";
 
 type AnswerCardsProps = {
   options: QuestionOption[];
+  /** "open" while voting runs, "locked" once voting is closed. */
+  state: "open" | "locked";
 };
 
 // Presentation is tuned for three options (Decision 033) but renders any count;
 // slot colors cycle in SCSS.
-export function AnswerCards({ options }: AnswerCardsProps) {
+export function AnswerCards({ options, state }: AnswerCardsProps) {
   return (
-    <ol className={styles.cards}>
+    <ol className={styles.cards} data-state={state}>
       {options.map((option, index) => (
         <li
           key={option.id}

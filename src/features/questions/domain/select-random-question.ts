@@ -3,14 +3,17 @@ import type { Question } from "./question";
 /**
  * Picks one question using an injected random number in [0, 1),
  * so callers decide where randomness comes from and tests stay deterministic.
- * Returns undefined for an empty list.
+ * Questions whose id is in `excludedQuestionIds` (e.g. already played in this
+ * session) are never picked. Returns undefined when no question is left.
  */
 export function selectRandomQuestion(
   questions: readonly Question[],
   randomNumber: number,
+  excludedQuestionIds: readonly string[] = [],
 ): Question | undefined {
-  if (questions.length === 0) return undefined;
+  const candidates = questions.filter((question) => !excludedQuestionIds.includes(question.id));
+  if (candidates.length === 0) return undefined;
 
-  const index = Math.min(Math.floor(randomNumber * questions.length), questions.length - 1);
-  return questions[index];
+  const index = Math.min(Math.floor(randomNumber * candidates.length), candidates.length - 1);
+  return candidates[index];
 }

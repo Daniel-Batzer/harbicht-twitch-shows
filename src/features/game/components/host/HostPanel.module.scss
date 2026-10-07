@@ -31,13 +31,40 @@
   background: $color-night-raised;
   border: 2px solid $color-ink-muted;
 
+  // One accent per state so the host can read the phase at a glance.
   &[data-status="INTRO"] {
     border-color: $color-gold;
     color: $color-gold;
   }
+
+  &[data-status="VOTING"] {
+    border-color: list.nth($answer-slot-colors, 2);
+    color: list.nth($answer-slot-colors, 2);
+  }
+
+  &[data-status="LOCKED"],
+  &[data-status="REVEAL"] {
+    border-color: list.nth($answer-slot-colors, 3);
+    color: list.nth($answer-slot-colors, 3);
+  }
+
+  &[data-status="RESULT"],
+  &[data-status="FINISHED"] {
+    border-color: list.nth($answer-slot-colors, 1);
+    color: list.nth($answer-slot-colors, 1);
+  }
 }
 
 .controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+// Fixed slot for the forward step, so the main button never jumps around.
+.primarySlot {
+  min-height: 60px;
   display: flex;
   gap: 16px;
 }
@@ -65,12 +92,21 @@
   }
 }
 
-.startButton {
+.primaryButton {
   @extend %button;
+  min-width: 260px;
   background: $color-gold;
   color: $color-night;
 }
 
+.secondaryButton {
+  @extend %button;
+  background: $color-night-raised;
+  border: 2px solid $color-gold;
+  color: $color-gold;
+}
+
+// Kept apart from the forward controls: ending aborts the whole session.
 .endButton {
   @extend %button;
   background: list.nth($answer-slot-colors, 1);
@@ -91,7 +127,7 @@
   box-shadow: $shadow-card;
 }
 
-.idleHint {
+.hint {
   color: $color-ink-muted;
 }
 
@@ -119,4 +155,8 @@
   display: grid;
   gap: 6px;
   font-size: 18px;
+}
+
+.roundLabel + .hint {
+  margin-top: 8px;
 }

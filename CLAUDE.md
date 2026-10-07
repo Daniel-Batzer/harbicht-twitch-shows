@@ -38,7 +38,7 @@ Planned but **not yet introduced**: PostgreSQL + Prisma, Twitch EventSub, Docker
 
 - **Domain is framework-free.** Game logic (sessions, rounds, questions, votes, voting rules, similarity) must not import Next.js, React, Twitch types, Prisma, or browser APIs. Dependency direction: UI → Application → Domain ← Infrastructure adapters. For example, the Twitch adapter turns raw EventSub/chat payloads into a domain `VoteInput`, and the domain decides validity.
 - **Two separate routes, one app:** `/host` is the streamer's control dashboard. `/overlay` is the OBS browser source: presentation only, transparent background, 1920×1080 reference canvas, no admin controls.
-- **Game flow is an explicit state machine:** IDLE → PREPARE → INTRO → VOTING → LOCKED → REVEAL → RESULT → (INTRO | FINISHED). Invalid transitions must not silently mutate state. Use plain code first; XState only if the complexity justifies it.
+- **Game flow is an explicit state machine:** IDLE → INTRO → VOTING → LOCKED → REVEAL → RESULT → (INTRO | FINISHED), with END_GAME back to IDLE from any running state (PREPARE deferred, Decision 042). Invalid transitions must not silently mutate state. Use plain code first; XState only if the complexity justifies it.
 - **Votes are stored individually** (userId, roundId, optionId, source HOST/CHAT/WEB, timestamp). Totals are derived from them. One effective vote per user per round, and the latest valid vote wins. Twitch user ID (not display name) is the identity.
 - **The host vote is a normal vote** tagged with the host identity, with no separate vote system. It is the reference for similarity scoring.
 - **Results stay hidden while voting is active.** The overlay may react to incoming votes but must not show totals until reveal.

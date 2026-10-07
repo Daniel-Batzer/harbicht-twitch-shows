@@ -40,15 +40,22 @@
   color: $color-night;
   font-family: $font-body;
   text-align: center;
+  transition: filter 400ms ease;
   animation: pop-in 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-  // Stagger after the question card has landed.
-  animation-delay: calc(450ms + var(--slot-index, 0) * 140ms);
+  // Cards mount when voting opens, after the question has landed; stagger them.
+  animation-delay: calc(150ms + var(--slot-index, 0) * 140ms);
 
   @for $slot from 1 through list.length($answer-slot-colors) {
     &[data-slot="#{$slot}"] {
       --slot-color: #{list.nth($answer-slot-colors, $slot)};
     }
   }
+}
+
+// Voting is closed: cards stay visible but dim. Only filter changes here,
+// because the entrance animation holds the transform.
+.cards[data-state="locked"] .card {
+  filter: saturate(0.55) brightness(0.8);
 }
 
 .badge {

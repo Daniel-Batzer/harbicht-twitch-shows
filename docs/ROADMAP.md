@@ -341,7 +341,7 @@ Move beyond static fixtures.
 - stored decks
 - stored questions
 - random selection from a deck
-- avoid repeats within a session
+- avoid repeats within a session (a minimal version already exists since Phase 2, Decision 042: the session tracks played question ids)
 - basic question editor
 - create/edit questions
 - optional context/trigger field

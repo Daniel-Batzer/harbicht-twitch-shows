@@ -32,4 +32,19 @@ describe("selectRandomQuestion", () => {
   it("returns undefined for an empty list", () => {
     expect(selectRandomQuestion([], 0.5)).toBeUndefined();
   });
+
+  it("never picks an excluded question", () => {
+    for (const randomNumber of [0, 0.25, 0.5, 0.75, 0.999]) {
+      expect(selectRandomQuestion(questions, randomNumber, ["q1", "q3"])?.id).toBe("q2");
+    }
+  });
+
+  it("maps the random number onto the remaining questions only", () => {
+    expect(selectRandomQuestion(questions, 0, ["q1"])?.id).toBe("q2");
+    expect(selectRandomQuestion(questions, 0.999, ["q1"])?.id).toBe("q3");
+  });
+
+  it("returns undefined when every question is excluded", () => {
+    expect(selectRandomQuestion(questions, 0.5, ["q1", "q2", "q3"])).toBeUndefined();
+  });
 });

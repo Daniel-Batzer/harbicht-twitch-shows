@@ -1,0 +1,77 @@
+@use "sass:list";
+@use "../../../../styles/tokens" as *;
+
+@keyframes banner-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) rotate(-4deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.08) rotate(1deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 24px color-mix(in srgb, var(--banner-color) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 56px color-mix(in srgb, var(--banner-color) 85%, transparent);
+  }
+}
+
+@keyframes drumroll {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+.banner {
+  --banner-color: #{$color-gold};
+
+  padding: 14px 48px;
+  border-radius: $radius-pill;
+  background: $color-night;
+  border: 5px solid var(--banner-color);
+  color: var(--banner-color);
+  font-family: $font-body;
+  font-size: 48px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  animation: banner-in 480ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+
+  &[data-phase="VOTING"] {
+    --banner-color: #{list.nth($answer-slot-colors, 2)};
+    animation:
+      banner-in 480ms cubic-bezier(0.34, 1.56, 0.64, 1) both,
+      pulse 1.4s ease-in-out 480ms infinite;
+  }
+
+  &[data-phase="LOCKED"] {
+    --banner-color: #{$color-ink-muted};
+  }
+
+  &[data-phase="REVEAL"] {
+    --banner-color: #{list.nth($answer-slot-colors, 3)};
+    animation:
+      banner-in 480ms cubic-bezier(0.34, 1.56, 0.64, 1) both,
+      drumroll 120ms linear 480ms infinite;
+  }
+
+  &[data-phase="RESULT"] {
+    --banner-color: #{list.nth($answer-slot-colors, 1)};
+  }
+}

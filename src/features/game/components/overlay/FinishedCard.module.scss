@@ -1,0 +1,43 @@
+@use "../../../../styles/tokens" as *;
+
+@keyframes slam-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.94);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.card {
+  padding: 64px 120px;
+  border-radius: $radius-card;
+  background: linear-gradient(160deg, $color-night-raised, $color-night);
+  border: 6px solid $color-gold;
+  box-shadow: $glow-gold, $shadow-card;
+  color: $color-ink;
+  font-family: $font-body;
+  text-align: center;
+  animation: slam-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.title {
+  font-size: 128px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+  color: $color-gold;
+  text-shadow: $glow-gold;
+}
+
+.subtitle {
+  margin-top: 24px;
+  font-size: 44px;
+  font-weight: 800;
+  color: $color-ink-muted;
+}

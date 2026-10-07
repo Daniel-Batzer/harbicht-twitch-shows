@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { usePolledGameSnapshot } from "../../hooks/use-polled-game-snapshot";
 import { AnswerCards } from "./AnswerCards";
+import { FinishedCard } from "./FinishedCard";
+import { PhaseBanner } from "./PhaseBanner";
 import { QuestionCard } from "./QuestionCard";
 import styles from "./OverlayStage.module.scss";
 
@@ -36,11 +38,31 @@ export function OverlayStage() {
       className={styles.stage}
       style={{ width: STAGE_WIDTH, height: STAGE_HEIGHT, transform: `translate(-50%, -50%) scale(${scale})` }}
     >
-      {snapshot?.status === "INTRO" && (
-        // Keyed by round so a new round remounts and replays the entrance.
-        <div key={snapshot.roundId} className={styles.round}>
-          <QuestionCard context={snapshot.question.context} prompt={snapshot.question.prompt} />
-          <AnswerCards options={snapshot.question.options} />
+      {/* IDLE (and the first fetch) render nothing: the stage stays transparent. */}
+
+      {snapshot?.status === "FINISHED" && (
+        <div className={styles.centered}>
+          <FinishedCard roundsPlayed={snapshot.roundsPlayed} />
+        </div>
+      )}
+
+      {snapshot && snapshot.status !== "IDLE" && snapshot.status !== "FINISHED" && (
+        // Keyed by round so a new round remounts and replays the question
+        // entrance; phase changes within a round keep it mounted.
+        <div key={snapshot.round.id} className={styles.round}>
+          <QuestionCard
+            eyebrow={`Round ${snapshot.round.number} / ${snapshot.round.totalRounds}`}
+            context={snapshot.round.question.context}
+            prompt={snapshot.round.question.prompt}
+          />
+          <PhaseBanner phase={snapshot.status} />
+          {/* Answers appear when voting opens (ARCHITECTURE §22) and stay for the rest of the round. */}
+          {snapshot.status !== "INTRO" && (
+            <AnswerCards
+              options={snapshot.round.question.options}
+              state={snapshot.status === "VOTING" ? "open" : "locked"}
+            />
+          )}
         </div>
       )}
     </div>
