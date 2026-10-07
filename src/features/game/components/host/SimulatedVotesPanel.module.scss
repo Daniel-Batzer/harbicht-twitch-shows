@@ -1,0 +1,95 @@
+@use "sass:list";
+@use "../../../../styles/tokens" as *;
+@use "host-button";
+
+$dev-color: list.nth($answer-slot-colors, 2);
+
+// Deliberately looks like a debug tool (dashed border), not part of the show.
+.panel {
+  padding: 24px 28px;
+  border-radius: $radius-card;
+  border: 3px dashed $dev-color;
+  display: grid;
+  gap: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.devTag {
+  padding: 2px 10px;
+  border-radius: $radius-pill;
+  background: $dev-color;
+  color: $color-night;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.heading {
+  font-size: 20px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 16px;
+}
+
+.viewerField {
+  display: grid;
+  gap: 6px;
+  color: $color-ink-muted;
+  font-weight: 800;
+}
+
+.viewerInput {
+  width: 200px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 2px solid $color-ink-muted;
+  background: $color-night;
+  color: $color-ink;
+  font: inherit;
+}
+
+.optionButtons {
+  display: flex;
+  gap: 12px;
+}
+
+.optionButton {
+  @include host-button.host-button;
+
+  padding: 12px 20px;
+  font-size: 16px;
+  background: $color-night-raised;
+  border: 2px solid $dev-color;
+  color: $dev-color;
+}
+
+.randomButton {
+  @include host-button.host-button;
+
+  padding: 12px 24px;
+  font-size: 16px;
+  background: $dev-color;
+  color: $color-night;
+}
+
+.hint {
+  color: $color-ink-muted;
+  font-size: 14px;
+}
+
+.feedback {
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: rgba(255, 61, 127, 0.15);
+  border: 2px solid list.nth($answer-slot-colors, 1);
+}

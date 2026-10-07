@@ -467,6 +467,8 @@ The same Twitch user should have at most one effective vote per round.
 
 New valid votes replace older votes from the same user.
 
+Implemented in Phase 3 (Decision 043) as `Vote { participantId, roundId, optionId, source, castAt }` in `src/features/voting/domain/`. `participantId` is an opaque, namespaced id (`local:host`, later `twitch:<userId>`). Whether a vote belongs to the host is decided by the participant id, not by the source. Sources are added when they exist: `HOST` and the dev-only `SIMULATED` now, `CHAT` in Phase 5, `WEB` in Phase 12.
+
 ---
 
 ## 17. Host Vote

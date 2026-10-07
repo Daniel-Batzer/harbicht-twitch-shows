@@ -38,6 +38,24 @@
   }
 }
 
+// The host's pick: one hard, finite shake, then the banner stands still.
+@keyframes host-shake {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  15%,
+  45%,
+  75% {
+    transform: translateX(-12px) rotate(-3deg);
+  }
+  30%,
+  60%,
+  90% {
+    transform: translateX(12px) rotate(3deg);
+  }
+}
+
 .banner {
   --banner-color: #{$color-gold};
 
@@ -73,5 +91,13 @@
 
   &[data-phase="RESULT"] {
     --banner-color: #{list.nth($answer-slot-colors, 1)};
+  }
+
+  // Declared after the phase rules so it overrides their animation.
+  &[data-shake="true"] {
+    --banner-color: #{$color-gold};
+    animation:
+      banner-in 480ms cubic-bezier(0.34, 1.56, 0.64, 1) both,
+      host-shake 500ms ease-in-out 480ms 3;
   }
 }

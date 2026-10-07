@@ -45,4 +45,40 @@ Pending:
 - **Motion integration** (still open from Slice 1, planned as its own small slice): question/answer enter and exit, phase banner transitions.
 - Manual OBS check (see Slice 1).
 
-Next: Motion follow-up, then Phase 3 – local voting.
+## Phase 3 / Slice 3 – Local Voting
+
+Status: **implemented**
+
+Done:
+
+- Voting domain in `src/features/voting/domain/`: individual votes with an opaque `participantId`, the replacement rule (`recordVote`), and derived results (`tallyVotes`). See Decision 043.
+- `castVote` in the game domain: accepts votes only in VOTING and only for an option of the current question. A later valid vote replaces the earlier one, and a rejected vote changes nothing. The session keeps all effective votes across rounds (`session.votes`) and the host's participant id.
+- Public snapshot without vote data before REVEAL. REVEAL and RESULT uncover the audience result (counts, percentages, winners) and the host's choice in the session's reveal order (Decision 044). Host-only data comes from a separate `HostRoundView`.
+- `/host`: the host votes and can change their vote during VOTING, sees the vote count (not the distribution) during VOTING/LOCKED, and sees the full result from REVEAL on. A DEV panel simulates viewers: a named viewer (voting again replaces the vote) or 10 random votes from a fixed pool of 30.
+- `/overlay`: once uncovered, each answer card shows percentage, vote count and a bar, and the winner(s) get a gold ring. The host's pick gets a sash and a spotlight, and the remaining cards step back. Styling is SCSS only.
+- Tests cover replacement, invalid options, votes in every non-VOTING state, votes across rounds and into FINISHED, the tally (no votes, ties, host vote), snapshot visibility per phase, the host view, and the simulated vote picker.
+- Configurable reveal order (Decision 044): `AUDIENCE_FIRST` (default) uncovers the audience result in REVEAL and the host's choice in RESULT; `HOST_FIRST` does the reverse. The phase that uncovers the host's choice shakes the banner and slams a sash with the host's name (`HOST_DISPLAY_NAME`) onto their card, with a spotlight. The host dashboard sees the audience result at the same moment as the overlay.
+
+Known limitations:
+
+- The reveal order can only be changed in code (`DEFAULT_REVEAL_ORDER` in `game-service.ts`). A per-game switch on the host panel is a planned follow-up.
+- Overlay texts are English only. Bilingual texts with a language choice for the host are a later juicing pass.
+- `/host` only updates after its own actions. Votes from other sources will need host polling (Phase 5).
+- The overlay gives no live feedback for incoming votes yet (Phase 4).
+- The simulated-viewer controls are available in every environment (Decision 043, revisit in Phase 5).
+- Percentages are rounded per option, so their sum may be 99 or 101.
+
+Pending:
+
+- **Motion integration** (still open from Slices 1 and 2).
+- Manual OBS check (see Slice 1).
+
+Open points from playtesting (for Phase 4 unless noted):
+
+- **Rules for rounds without a host vote.** Without a host vote the host-pick step has nothing to uncover (with `AUDIENCE_FIRST`, RESULT only says "Chat has spoken"). Options: a warning on the host panel before locking, an explicit "Louis sat this one out" moment, or merging both reveal steps when the host did not vote.
+- **"And chat says…" is a placeholder.** The banner promises suspense while the numbers are already visible. The numbers should follow the banner (e.g. bars counting up).
+- **Winner ring comes too early.** With `AUDIENCE_FIRST` it already appears in REVEAL, so the final step only adds the host's pick. Decide whether winner emphasis belongs to the last step.
+- **Spotlight design.** The current CSS light cone is a first version and needs a nicer look.
+- **Reveal-order switch** on the host panel, per game (see Decision 044).
+
+Next: Motion follow-up / Phase 4 reveal presentation, or Phase 5 Twitch chat voting.

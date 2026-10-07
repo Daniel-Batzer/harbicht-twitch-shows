@@ -1,0 +1,25 @@
+@use "../../../../styles/tokens" as *;
+
+// Chunky arcade button shared by the host panel and its vote sections.
+@mixin host-button {
+  padding: 16px 32px;
+  border: none;
+  border-radius: $radius-pill;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 900;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.4);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+
+  &:active:not(:disabled) {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+}

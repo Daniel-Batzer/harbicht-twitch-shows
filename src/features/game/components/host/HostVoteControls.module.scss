@@ -1,0 +1,81 @@
+@use "sass:list";
+@use "../../../../styles/tokens" as *;
+@use "host-button";
+
+.section {
+  margin-top: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.heading {
+  font-size: 18px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: $color-gold;
+}
+
+.voteCount {
+  padding: 4px 14px;
+  border-radius: $radius-pill;
+  background: $color-night;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.options {
+  display: grid;
+  gap: 12px;
+}
+
+.optionButton {
+  @include host-button.host-button;
+
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 18px;
+  text-align: left;
+  text-transform: none;
+  background: $color-night;
+  border: 3px solid $color-night;
+  color: $color-ink;
+}
+
+.chosen {
+  border-color: $color-gold;
+  box-shadow: $glow-gold, 0 6px 0 rgba(0, 0, 0, 0.4);
+}
+
+.optionNumber {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: $color-gold;
+  color: $color-night;
+}
+
+.summary {
+  color: $color-ink-muted;
+
+  strong {
+    color: $color-ink;
+  }
+}
+
+.feedback {
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: rgba(255, 61, 127, 0.15);
+  border: 2px solid list.nth($answer-slot-colors, 1);
+}

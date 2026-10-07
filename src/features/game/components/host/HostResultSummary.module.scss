@@ -1,0 +1,64 @@
+@use "../../../../styles/tokens" as *;
+
+.summary {
+  margin-top: 24px;
+  display: grid;
+  gap: 12px;
+}
+
+.total {
+  color: $color-ink-muted;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.options {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+}
+
+// The bar is a background gradient sized by the option's share.
+.option {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(90deg, rgba(255, 210, 63, 0.28) var(--share), transparent var(--share)),
+    $color-night;
+
+  &[data-winner="true"] {
+    border-color: $color-gold;
+  }
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+}
+
+.hostTag {
+  padding: 2px 10px;
+  border-radius: $radius-pill;
+  background: $color-gold;
+  color: $color-night;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.numbers {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.hint {
+  color: $color-ink-muted;
+}

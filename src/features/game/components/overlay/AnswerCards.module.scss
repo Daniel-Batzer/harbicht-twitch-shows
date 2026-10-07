@@ -1,6 +1,56 @@
 @use "sass:list";
 @use "../../../../styles/tokens" as *;
 
+@keyframes stats-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes sash-slam {
+  0% {
+    opacity: 0;
+    transform: rotate(14deg) scale(2.6);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(14deg) scale(1);
+  }
+}
+
+@keyframes sash-wobble {
+  0%,
+  100% {
+    transform: rotate(14deg);
+  }
+  25% {
+    transform: rotate(10deg) translateX(-6px);
+  }
+  75% {
+    transform: rotate(18deg) translateX(6px);
+  }
+}
+
+@keyframes spotlight-on {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes bar-fill {
+  from {
+    width: 0;
+  }
+}
+
 @keyframes pop-in {
   0% {
     opacity: 0;
@@ -32,15 +82,19 @@
   min-height: 300px;
   padding: 72px 36px 40px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 24px;
   border-radius: $radius-card;
   background: var(--slot-color);
   box-shadow: 0 0 40px color-mix(in srgb, var(--slot-color) 60%, transparent), $shadow-card;
   color: $color-night;
   font-family: $font-body;
   text-align: center;
-  transition: filter 400ms ease;
+  transition:
+    filter 400ms ease,
+    box-shadow 400ms ease;
   animation: pop-in 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   // Cards mount when voting opens, after the question has landed; stagger them.
   animation-delay: calc(150ms + var(--slot-index, 0) * 140ms);
@@ -56,6 +110,43 @@
 // because the entrance animation holds the transform.
 .cards[data-state="locked"] .card {
   filter: saturate(0.55) brightness(0.8);
+}
+
+// From REVEAL on (Decision 044): winners glow gold, the host's pick gets a
+// spotlight, and cards that are neither step back. In the phase that uncovers
+// the host's pick, all of this waits until the banner has finished shaking.
+.cards {
+  --host-reveal-delay: 0ms;
+
+  &[data-host-pick-moment="true"] {
+    --host-reveal-delay: 1900ms;
+  }
+}
+
+.cards[data-state="revealed"] .card {
+  &[data-dimmed="true"] {
+    filter: saturate(0.4) brightness(0.6);
+    transition-delay: var(--host-reveal-delay);
+  }
+
+  &[data-winner="true"] {
+    box-shadow: 0 0 0 8px $color-gold, $glow-gold, $shadow-card;
+  }
+
+  // Spotlight: a soft cone of light falling onto the host's pick from above.
+  &[data-host-pick="true"]::after {
+    content: "";
+    position: absolute;
+    left: -15%;
+    bottom: 70%;
+    width: 130%;
+    height: 320px;
+    clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%);
+    background: linear-gradient(to bottom, rgba(255, 248, 231, 0), rgba(255, 248, 231, 0.35));
+    pointer-events: none;
+    animation: spotlight-on 500ms ease-out both;
+    animation-delay: var(--host-reveal-delay);
+  }
 }
 
 .badge {
@@ -79,4 +170,69 @@
   font-size: 44px;
   font-weight: 900;
   line-height: 1.15;
+}
+
+// Diagonal sash across the host's card: slams in, then wobbles.
+.hostSash {
+  position: absolute;
+  top: 34px;
+  right: -40px;
+  z-index: 1;
+  padding: 10px 56px;
+  background: $color-gold;
+  border: 4px solid $color-night;
+  color: $color-night;
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: $glow-gold, 0 8px 0 rgba(0, 0, 0, 0.35);
+  transform: rotate(14deg);
+  animation:
+    sash-slam 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both,
+    sash-wobble 140ms ease-in-out 4;
+  animation-delay: var(--host-reveal-delay), calc(var(--host-reveal-delay) + 420ms);
+}
+
+// Appears on reveal. Static SCSS for now; the dramatic reveal is Phase 4.
+.stats {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  animation: stats-in 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: calc(var(--slot-index, 0) * 160ms);
+}
+
+.percentage {
+  font-size: 88px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.votes {
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.bar {
+  width: 100%;
+  height: 20px;
+  margin-top: 8px;
+  border-radius: $radius-pill;
+  background: rgba(18, 6, 43, 0.25);
+  overflow: hidden;
+
+  &::after {
+    content: "";
+    display: block;
+    width: var(--share);
+    height: 100%;
+    border-radius: inherit;
+    background: $color-night;
+    animation: bar-fill 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(200ms + var(--slot-index, 0) * 160ms);
+  }
 }

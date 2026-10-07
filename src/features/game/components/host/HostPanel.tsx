@@ -1,8 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
-import type { GameCommand, TransitionFailure } from "../../domain/game-state";
-import type { GameSnapshot } from "../../game-snapshot";
+import type { GameCommand, RevealOrder, TransitionFailure } from "../../domain/game-state";
+import { getRevealedResult, type GameSnapshot, type RoundPhaseSnapshot } from "../../game-snapshot";
+import type { HostRoundView } from "../../host-view";
+import { HostResultSummary } from "./HostResultSummary";
+import { HostVoteControls } from "./HostVoteControls";
+import { SimulatedVotesPanel } from "./SimulatedVotesPanel";
+import type { HostVoteAction } from "./vote-feedback";
 import styles from "./HostPanel.module.scss";
 
 /**
@@ -15,9 +20,14 @@ type HostCommandAction = (previousFeedback: HostActionFeedback, formData: FormDa
 
 type HostPanelProps = {
   snapshot: GameSnapshot;
+  /** Host-only round data (vote count, own vote); null outside a round. */
+  hostRound: HostRoundView | null;
   /** Decided by the domain; the panel only arranges them. */
   availableCommands: GameCommand[];
   onCommand: HostCommandAction;
+  onHostVote: HostVoteAction;
+  onSimulatedVote: HostVoteAction;
+  onRandomVotes: HostVoteAction;
 };
 
 const commandLabels: Record<GameCommand, string> = {
@@ -63,6 +73,57 @@ function arrangeHostControls(availableCommands: GameCommand[]): HostControls {
   };
 }
 
+const revealOrderLabels: Record<RevealOrder, string> = {
+  AUDIENCE_FIRST: "audience first, then your pick",
+  HOST_FIRST: "your pick first, then the audience",
+};
+
+/**
+ * The host sees the audience result at the same moment as the overlay, so the
+ * reveal is a surprise for them too. Until then they only see their own vote.
+ */
+function HostRoundOutcome({
+  snapshot,
+  hostRound,
+  onHostVote,
+}: {
+  snapshot: RoundPhaseSnapshot;
+  hostRound: HostRoundView | null;
+  onHostVote: HostVoteAction;
+}) {
+  if (snapshot.status === "INTRO") {
+    return (
+      <ol className={styles.options}>
+        {snapshot.round.question.options.map((option) => (
+          <li key={option.id}>{option.label}</li>
+        ))}
+      </ol>
+    );
+  }
+
+  const result = getRevealedResult(snapshot);
+  if (result) {
+    return (
+      <HostResultSummary
+        options={snapshot.round.question.options}
+        result={result}
+        hostOptionId={hostRound?.hostOptionId ?? null}
+      />
+    );
+  }
+
+  if (!hostRound) return null;
+  return (
+    <HostVoteControls
+      options={snapshot.round.question.options}
+      hostOptionId={hostRound.hostOptionId}
+      voteCount={hostRound.voteCount}
+      isVotingOpen={snapshot.status === "VOTING"}
+      onVote={onHostVote}
+    />
+  );
+}
+
 function describeFailure(failure: HostActionFailure): string {
   switch (failure.reason) {
     case "INVALID_TRANSITION":
@@ -78,7 +139,15 @@ function describeFailure(failure: HostActionFailure): string {
   }
 }
 
-export function HostPanel({ snapshot, availableCommands, onCommand }: HostPanelProps) {
+export function HostPanel({
+  snapshot,
+  hostRound,
+  availableCommands,
+  onCommand,
+  onHostVote,
+  onSimulatedVote,
+  onRandomVotes,
+}: HostPanelProps) {
   const [feedback, commandAction, isPending] = useActionState(onCommand, null);
   const controls = arrangeHostControls(availableCommands);
 
@@ -150,14 +219,24 @@ export function HostPanel({ snapshot, availableCommands, onCommand }: HostPanelP
               <p className={styles.context}>{snapshot.round.question.context}</p>
             )}
             <h2 className={styles.prompt}>{snapshot.round.question.prompt}</h2>
-            <ol className={styles.options}>
-              {snapshot.round.question.options.map((option) => (
-                <li key={option.id}>{option.label}</li>
-              ))}
-            </ol>
+            {(snapshot.status === "REVEAL" || snapshot.status === "RESULT") && (
+              <p className={styles.hint}>Reveal order: {revealOrderLabels[snapshot.revealOrder]}</p>
+            )}
+
+            <HostRoundOutcome snapshot={snapshot} hostRound={hostRound} onHostVote={onHostVote} />
           </>
         )}
       </section>
+
+      {/* Rendered for the whole round (not only VOTING) so a rejected vote can still show its message. */}
+      {snapshot.status !== "IDLE" && snapshot.status !== "FINISHED" && (
+        <SimulatedVotesPanel
+          options={snapshot.round.question.options}
+          isVotingOpen={snapshot.status === "VOTING"}
+          onSimulatedVote={onSimulatedVote}
+          onRandomVotes={onRandomVotes}
+        />
+      )}
     </main>
   );
 }

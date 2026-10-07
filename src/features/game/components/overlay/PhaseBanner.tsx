@@ -1,28 +1,21 @@
-import type { RoundPhase } from "../../domain/game-state";
+import type { RoundPhaseSnapshot } from "../../game-snapshot";
+import { getPhaseBanner } from "./phase-banner";
 import styles from "./PhaseBanner.module.scss";
 
 type PhaseBannerProps = {
-  phase: RoundPhase;
+  snapshot: RoundPhaseSnapshot;
 };
 
-// REVEAL and RESULT are placeholders until votes exist (Phase 3) and the
-// reveal sequence is built (Phase 4).
-const bannerTexts: Record<RoundPhase, string | null> = {
-  INTRO: null,
-  VOTING: "Voting open",
-  LOCKED: "Voting closed",
-  REVEAL: "And the answer is…",
-  RESULT: "Result",
-};
-
-export function PhaseBanner({ phase }: PhaseBannerProps) {
-  const text = bannerTexts[phase];
-  if (!text) return null;
+// The banner names the phase or the reveal moment; numbers and the host's
+// pick themselves are shown on the answer cards.
+export function PhaseBanner({ snapshot }: PhaseBannerProps) {
+  const banner = getPhaseBanner(snapshot);
+  if (!banner) return null;
 
   // Keyed by phase so the entrance replays on every phase change.
   return (
-    <p key={phase} className={styles.banner} data-phase={phase}>
-      {text}
+    <p key={snapshot.status} className={styles.banner} data-phase={snapshot.status} data-shake={banner.shake}>
+      {banner.text}
     </p>
   );
 }

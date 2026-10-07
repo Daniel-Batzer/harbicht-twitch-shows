@@ -1,5 +1,6 @@
 import type { Deck, Question } from "../../questions/domain/question";
 import { selectRandomQuestion } from "../../questions/domain/select-random-question";
+import type { ParticipantId, Vote } from "../../voting/domain/vote";
 
 // The game flow as an explicit state machine (Decision 028, Decision 042):
 //
@@ -15,12 +16,29 @@ import { selectRandomQuestion } from "../../questions/domain/select-random-quest
 export type RoundPhase = "INTRO" | "VOTING" | "LOCKED" | "REVEAL" | "RESULT";
 export type GameStatus = "IDLE" | RoundPhase | "FINISHED";
 
+/**
+ * Presentation setting: which part of a round's outcome REVEAL uncovers first
+ * (Decision 044). AUDIENCE_FIRST shows the vote distribution in REVEAL and adds
+ * the host's choice in RESULT; HOST_FIRST does it the other way around.
+ * The domain only stores it; the snapshot projection interprets it.
+ */
+export type RevealOrder = "AUDIENCE_FIRST" | "HOST_FIRST";
+
 export type GameSession = {
   id: string;
   deckId: string;
   totalRounds: number;
   /** Includes the current round's question; used to avoid repeats within the session. */
   playedQuestionIds: string[];
+  /** The host votes as a normal participant; this id marks their votes (Decision 013). */
+  hostParticipantId: ParticipantId;
+  /**
+   * Every effective vote of the session, across all rounds (one per participant
+   * per round). Kept after a round ends so similarity can use it later.
+   */
+  votes: Vote[];
+  /** Fixed for the whole session. */
+  revealOrder: RevealOrder;
 };
 
 export type CurrentRound = {
@@ -63,6 +81,8 @@ export type RoundDependencies = {
 
 export type GameSettings = {
   totalRounds: number;
+  hostParticipantId: ParticipantId;
+  revealOrder: RevealOrder;
 };
 
 export type GameCommandContext = RoundDependencies & GameSettings & { deck: Deck };
@@ -85,7 +105,7 @@ export function startGame(
 ): TransitionResult {
   if (state.status !== "IDLE") return invalidTransition(state, "START_GAME");
 
-  const { totalRounds } = settings;
+  const { totalRounds, hostParticipantId, revealOrder } = settings;
   if (!Number.isInteger(totalRounds) || totalRounds < 1) {
     return { ok: false, failure: { reason: "INVALID_TOTAL_ROUNDS" } };
   }
@@ -99,7 +119,15 @@ export function startGame(
     ok: true,
     state: {
       status: "INTRO",
-      session: { id: dependencies.createId(), deckId: deck.id, totalRounds, playedQuestionIds: [question.id] },
+      session: {
+        id: dependencies.createId(),
+        deckId: deck.id,
+        totalRounds,
+        playedQuestionIds: [question.id],
+        hostParticipantId,
+        votes: [],
+        revealOrder,
+      },
       currentRound: { id: dependencies.createId(), number: 1, question },
     },
   };
@@ -185,7 +213,16 @@ export function getAvailableCommands(state: GameState): GameCommand[] {
 export function applyGameCommand(state: GameState, command: GameCommand, context: GameCommandContext): TransitionResult {
   switch (command) {
     case "START_GAME":
-      return startGame(state, context.deck, { totalRounds: context.totalRounds }, context);
+      return startGame(
+        state,
+        context.deck,
+        {
+          totalRounds: context.totalRounds,
+          hostParticipantId: context.hostParticipantId,
+          revealOrder: context.revealOrder,
+        },
+        context,
+      );
     case "OPEN_VOTING":
       return openVoting(state);
     case "LOCK_VOTING":

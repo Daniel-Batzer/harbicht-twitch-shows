@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { RoundPhase } from "../../domain/game-state";
+import { getRevealedHostPick, getRevealedResult } from "../../game-snapshot";
 import { usePolledGameSnapshot } from "../../hooks/use-polled-game-snapshot";
-import { AnswerCards } from "./AnswerCards";
+import { AnswerCards, type AnswerCardsState } from "./AnswerCards";
+import { getPhaseBanner } from "./phase-banner";
 import { FinishedCard } from "./FinishedCard";
 import { PhaseBanner } from "./PhaseBanner";
 import { QuestionCard } from "./QuestionCard";
@@ -12,6 +15,13 @@ import styles from "./OverlayStage.module.scss";
 // and scaled to fit the actual viewport.
 const STAGE_WIDTH = 1920;
 const STAGE_HEIGHT = 1080;
+
+const answerCardsStates: Record<Exclude<RoundPhase, "INTRO">, AnswerCardsState> = {
+  VOTING: "open",
+  LOCKED: "locked",
+  REVEAL: "revealed",
+  RESULT: "revealed",
+};
 
 function useStageScale(): number {
   const [scale, setScale] = useState(1);
@@ -55,12 +65,16 @@ export function OverlayStage() {
             context={snapshot.round.question.context}
             prompt={snapshot.round.question.prompt}
           />
-          <PhaseBanner phase={snapshot.status} />
-          {/* Answers appear when voting opens (ARCHITECTURE §22) and stay for the rest of the round. */}
+          <PhaseBanner snapshot={snapshot} />
+          {/* Answers appear when voting opens (ARCHITECTURE §22) and stay mounted for the rest of the round. */}
           {snapshot.status !== "INTRO" && (
             <AnswerCards
               options={snapshot.round.question.options}
-              state={snapshot.status === "VOTING" ? "open" : "locked"}
+              state={answerCardsStates[snapshot.status]}
+              // What REVEAL and RESULT uncover depends on the reveal order (Decision 044).
+              result={getRevealedResult(snapshot)}
+              host={getRevealedHostPick(snapshot)}
+              isHostPickMoment={getPhaseBanner(snapshot)?.shake ?? false}
             />
           )}
         </div>

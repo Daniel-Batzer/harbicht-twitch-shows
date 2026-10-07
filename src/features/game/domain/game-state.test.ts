@@ -15,6 +15,7 @@ import {
   startNextRound,
   type GameCommand,
   type GameCommandContext,
+  type GameSettings,
   type GameState,
   type GameStatus,
   type RoundDependencies,
@@ -41,6 +42,7 @@ const deck: Deck = {
 };
 
 const TOTAL_ROUNDS = 3;
+const HOST_PARTICIPANT_ID = "local:host";
 
 function makeDependencies(randomNumber = 0): RoundDependencies {
   let nextId = 0;
@@ -50,8 +52,12 @@ function makeDependencies(randomNumber = 0): RoundDependencies {
   };
 }
 
+function makeSettings(totalRounds: number): GameSettings {
+  return { totalRounds, hostParticipantId: HOST_PARTICIPANT_ID, revealOrder: "HOST_FIRST" };
+}
+
 function makeContext(randomNumber = 0): GameCommandContext {
-  return { deck, totalRounds: TOTAL_ROUNDS, ...makeDependencies(randomNumber) };
+  return { deck, ...makeSettings(TOTAL_ROUNDS), ...makeDependencies(randomNumber) };
 }
 
 function expectOk(result: TransitionResult): GameState {
@@ -143,40 +149,49 @@ describe("getAvailableCommands", () => {
 });
 
 describe("startGame", () => {
-  it("moves from IDLE to INTRO with round 1, the session settings and injected ids", () => {
-    const result = startGame(initialGameState, deck, { totalRounds: 3 }, makeDependencies(0.3));
+  it("moves from IDLE to INTRO with round 1, the session settings, injected ids and no votes", () => {
+    // HOST_FIRST (not the service default) proves the setting is taken over, not assumed.
+    const result = startGame(initialGameState, deck, makeSettings(3), makeDependencies(0.3));
 
     expect(result).toEqual({
       ok: true,
       state: {
         status: "INTRO",
-        session: { id: "id-1", deckId: "test-deck", totalRounds: 3, playedQuestionIds: ["q2"] },
+        session: {
+          id: "id-1",
+          deckId: "test-deck",
+          totalRounds: 3,
+          playedQuestionIds: ["q2"],
+          hostParticipantId: HOST_PARTICIPANT_ID,
+          votes: [],
+          revealOrder: "HOST_FIRST",
+        },
         currentRound: { id: "id-2", number: 1, question: deck.questions[1] },
       },
     });
   });
 
   it("allows a session that uses every question of the deck", () => {
-    expectOk(startGame(initialGameState, deck, { totalRounds: deck.questions.length }, makeDependencies()));
+    expectOk(startGame(initialGameState, deck, makeSettings(deck.questions.length), makeDependencies()));
   });
 
   it("rejects an empty deck", () => {
     const emptyDeck: Deck = { ...deck, questions: [] };
 
-    expect(startGame(initialGameState, emptyDeck, { totalRounds: 1 }, makeDependencies())).toEqual({
+    expect(startGame(initialGameState, emptyDeck, makeSettings(1), makeDependencies())).toEqual({
       ok: false,
       failure: { reason: "NOT_ENOUGH_QUESTIONS" },
     });
   });
 
   it("rejects a deck with fewer questions than rounds", () => {
-    expect(startGame(initialGameState, deck, { totalRounds: deck.questions.length + 1 }, makeDependencies())).toEqual(
+    expect(startGame(initialGameState, deck, makeSettings(deck.questions.length + 1), makeDependencies())).toEqual(
       { ok: false, failure: { reason: "NOT_ENOUGH_QUESTIONS" } },
     );
   });
 
   it.each([0, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY])("rejects totalRounds = %s", (totalRounds) => {
-    expect(startGame(initialGameState, deck, { totalRounds }, makeDependencies())).toEqual({
+    expect(startGame(initialGameState, deck, makeSettings(totalRounds), makeDependencies())).toEqual({
       ok: false,
       failure: { reason: "INVALID_TOTAL_ROUNDS" },
     });

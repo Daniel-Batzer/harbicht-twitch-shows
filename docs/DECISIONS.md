@@ -1251,7 +1251,92 @@ END_GAME: any running state (including FINISHED) → IDLE
 
 - PREPARE has real content (deck or round-count choice).
 - Timers (Phase 6) or reveal choreography (Phase 4) add automatic transitions.
-- Votes (Phase 3) need a round history beyond `playedQuestionIds`.
+- Votes (Phase 3) need a round history beyond `playedQuestionIds`. (Phase 3 did not need one: votes carry their `roundId`, see Decision 043.)
+
+---
+
+# Decision 043 – Local Voting Model and Participant Identity
+
+## Status
+
+Accepted
+
+## Decision
+
+Phase 3 implements voting locally, with simulated viewers instead of Twitch chat. The model is shaped so that Twitch only changes who builds the vote input, not the rules or the stored data.
+
+- **Vote** (`src/features/voting/domain/vote.ts`): `{ participantId, roundId, optionId, source, castAt }`. This is ARCHITECTURE §16 with `userId` named `participantId`.
+- **Participant identity:** `ParticipantId` is an opaque string. The domain only compares it and never parses it. The application layer builds namespaced ids (`src/features/voting/participant-ids.ts`): `local:host`, `local:sim-<key>`, and in Phase 5 `twitch:<twitchUserId>`. Chat and web votes of one Twitch user therefore share one id (Decisions 011, 012).
+- **Host identity comes from the participant id, not the source.** The session stores `hostParticipantId`, which the service supplies (`local:host` now, the broadcaster's Twitch id later). If the streamer also votes through chat later, that replaces their dashboard vote instead of adding a second one. The host's participant id never comes from client input.
+- **Sources** are only added when they exist: `HOST` (host dashboard) and `SIMULATED` (dev controls). `CHAT` and `WEB` follow in Phases 5 and 12. Simulated votes are not tagged `CHAT`, so the data never claims a false origin.
+- **Storage:** `session.votes` is one flat list of the session's effective votes across all rounds, keyed by `roundId`. It survives `START_NEXT_ROUND` and `FINISHED`, so it is available for similarity later. `END_GAME` discards it (no persistence yet). Each `(roundId, participantId)` pair has at most one entry, which is enforced when a vote is recorded.
+- **Rules** (`castVote` in `src/features/game/domain/cast-vote.ts`): votes are accepted only in VOTING (`VOTING_NOT_OPEN` otherwise, including INTRO), and only for an option of the current question (`INVALID_OPTION`). A later valid vote replaces the earlier one, even for the same option. A rejected vote leaves the previous valid vote untouched. "Latest" means processing order, not a comparison of timestamps. `castAt` is passed in, and the domain never reads the clock. A vote is not a `GameCommand`: it never changes the status or the round.
+- **Results** are derived on demand (`tallyVotes`) and never stored: one count per option in question order, every option with the highest count as winner (several on a tie, none without votes). The host vote counts like any other vote. Percentages are rounded per option in the snapshot, so their sum may be 99 or 101.
+- **Visibility is enforced on the server.** The public `GameSnapshot` (`GET /api/game/state`) contains no vote data in INTRO, VOTING or LOCKED, not even the vote count. What REVEAL and RESULT uncover depends on the reveal order (Decision 044). Host-only data (vote count, own choice) lives in a separate `HostRoundView` (`src/features/game/host-view.ts`), which only the `/host` server component renders. During voting the host sees the count and their own vote, not the distribution, because they are a participant and are on stream.
+- **Simulated viewers** (dev controls on `/host`): a named viewer, where voting again replaces the vote, and random batches drawn from a fixed pool of 30 viewers. They pass through exactly the same rules as any other vote. They are not gated by environment yet.
+
+## Reason
+
+- Twitch user ids become the real identity in Phase 5. Keeping the id opaque and namespaced means that change happens in one adapter, not in the voting rules, the stored shape, or the tests.
+- Recognizing the host by source would break as soon as the host can vote through more than one channel.
+- One flat vote list with `roundId` is the simplest shape that satisfies replacement, host identification, and later similarity, and it maps directly onto a future `Vote` table with a unique `(roundId, participantId)`.
+- Hiding results in the snapshot mapping, not in the overlay components, means no client can read totals early, including clients that call the public API directly.
+
+## Alternatives
+
+- Raw Twitch ids without a namespace: no way to tell local ids from Twitch ids, and collisions become possible once more origins exist.
+- A structured identity object (`{ kind, id }`): more ceremony for the same guarantee.
+- Votes stored per round object: needs a round history before it is required, and is harder to query across rounds for similarity.
+- Tagging simulated votes as `CHAT`: one fewer source, but the data would lie about where votes came from.
+
+## Revisit When
+
+- Phase 5 (Twitch chat): add `CHAT` and the `twitch:` ids, map `!vote N` to an option id in the adapter, decide on event de-duplication and whether event timestamps should order votes, and remove or gate the simulated-viewer controls.
+- Phase 4 (reveal): whether percentages should add up to exactly 100, and live vote feedback in the overlay.
+- Phase 7 (persistence): `session.votes` becomes a table. `playedQuestionIds` and a per-round history can then be derived from stored rounds.
+
+---
+
+# Decision 044 – Configurable Reveal Order
+
+## Status
+
+Accepted
+
+## Decision
+
+The session has a reveal order. It decides what the existing REVEAL and RESULT phases uncover:
+
+```ts
+type RevealOrder = "AUDIENCE_FIRST" | "HOST_FIRST";
+```
+
+| | REVEAL | RESULT |
+|---|---|---|
+| `AUDIENCE_FIRST` | audience distribution | adds the host's choice |
+| `HOST_FIRST` | host's choice | adds the audience distribution |
+
+- **No new states.** The state machine stays `LOCKED → REVEAL → RESULT`, and there is no generic reveal-sequence system.
+- The order is part of `GameSettings`, is stored in the session by `startGame`, and stays fixed for the session. The domain only stores it.
+- The public snapshot projection (`toGameSnapshot`) interprets it. REVEAL carries either `result` or `host`, and RESULT carries both, plus `hostPickedWinner`: whether the host's choice is among the winners (also on a tie), or `null` if the host did not vote. Components never see data that is not uncovered yet.
+- There is no settings UI yet. The service default is `AUDIENCE_FIRST`. A per-game switch on the host panel is a planned follow-up, and only that form and the service call need to change for it.
+- The host dashboard shows the audience result at the same moment as the overlay, so the reveal is a surprise for the streamer too.
+- **Host display name:** `HOST_DISPLAY_NAME` (server-side env variable, validated with Zod, falls back to `Host`). It is passed into the snapshot projection as presentation data and is not stored in the domain. Phase 5 replaces it with the broadcaster's Twitch display name.
+- Overlay presentation (SCSS only): the phase that uncovers the host's choice shakes the banner ("Louis picked…", "Chat agrees with Louis!"), then slams a sash with the host's name onto their card and puts a spotlight on it.
+
+## Reason
+
+Showing the full distribution in REVEAL and only adding a winner ring in RESULT left the second phase without a real moment. Two uncoverings make two reveal beats. Which beat should come first is a matter of stream taste, so the order is a setting rather than a rule.
+
+## Alternatives
+
+- Fixed order: simpler, but the streamer asked to switch between both.
+- Extra states such as `HOST_REVEAL`: more transitions and commands for what is only a presentation choice.
+
+## Revisit When
+
+- A settings UI exists (per-game switch on the host panel).
+- Phase 4 adds Motion choreography for the reveal.
 
 ---
 
