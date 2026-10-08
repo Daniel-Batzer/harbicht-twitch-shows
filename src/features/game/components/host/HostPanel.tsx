@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import type { GameCommand, RevealOrder, TransitionFailure } from "../../domain/game-state";
+import { REVEAL_ORDERS, type GameCommand, type RevealOrder, type TransitionFailure } from "../../domain/game-state";
 import { getRevealedResult, type GameSnapshot, type RoundPhaseSnapshot } from "../../game-snapshot";
 import type { HostRoundView } from "../../host-view";
 import { HostResultSummary } from "./HostResultSummary";
@@ -12,9 +12,9 @@ import styles from "./HostPanel.module.scss";
 
 /**
  * Failures the host can see: domain transition failures, plus input that never
- * reached the domain because it was not a valid command.
+ * reached the domain because it was not a valid command or setting.
  */
-export type HostActionFailure = TransitionFailure | { reason: "UNKNOWN_COMMAND" };
+export type HostActionFailure = TransitionFailure | { reason: "UNKNOWN_COMMAND" } | { reason: "INVALID_REVEAL_ORDER" };
 export type HostActionFeedback = { failure: HostActionFailure } | null;
 type HostCommandAction = (previousFeedback: HostActionFeedback, formData: FormData) => Promise<HostActionFeedback>;
 
@@ -24,6 +24,8 @@ type HostPanelProps = {
   hostRound: HostRoundView | null;
   /** Decided by the domain; the panel only arranges them. */
   availableCommands: GameCommand[];
+  /** Preselected when a new game is started. */
+  defaultRevealOrder: RevealOrder;
   onCommand: HostCommandAction;
   onHostVote: HostVoteAction;
   onSimulatedVote: HostVoteAction;
@@ -77,6 +79,32 @@ const revealOrderLabels: Record<RevealOrder, string> = {
   AUDIENCE_FIRST: "audience first, then your pick",
   HOST_FIRST: "your pick first, then the audience",
 };
+
+const revealOrderTitles: Record<RevealOrder, string> = {
+  AUDIENCE_FIRST: "Audience first",
+  HOST_FIRST: "Host first",
+};
+
+/** Part of the start form: the order applies to the game that is about to start and stays fixed until it ends. */
+function RevealOrderPicker({ defaultRevealOrder }: { defaultRevealOrder: RevealOrder }) {
+  return (
+    <fieldset className={styles.revealOrder}>
+      <legend className={styles.revealOrderLegend}>Reveal order</legend>
+      {REVEAL_ORDERS.map((revealOrder) => (
+        <label key={revealOrder} className={styles.revealOrderOption}>
+          <input
+            type="radio"
+            name="revealOrder"
+            value={revealOrder}
+            defaultChecked={revealOrder === defaultRevealOrder}
+          />
+          <span className={styles.revealOrderTitle}>{revealOrderTitles[revealOrder]}</span>
+          <span className={styles.revealOrderDescription}>Reveals {revealOrderLabels[revealOrder]}.</span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
 
 /**
  * The host sees the audience result at the same moment as the overlay, so the
@@ -136,6 +164,8 @@ function describeFailure(failure: HostActionFailure): string {
       return "The deck does not have enough unplayed questions for this session.";
     case "UNKNOWN_COMMAND":
       return "Unknown command.";
+    case "INVALID_REVEAL_ORDER":
+      return "Choose a reveal order before starting the game.";
   }
 }
 
@@ -143,6 +173,7 @@ export function HostPanel({
   snapshot,
   hostRound,
   availableCommands,
+  defaultRevealOrder,
   onCommand,
   onHostVote,
   onSimulatedVote,
@@ -161,36 +192,39 @@ export function HostPanel({
       </header>
 
       {/* One form; the clicked button submits its own command value. */}
-      <form action={commandAction} className={styles.controls}>
-        <div className={styles.primarySlot}>
-          {controls.primary && (
-            <button
-              className={styles.primaryButton}
-              type="submit"
-              name="command"
-              value={controls.primary}
-              disabled={isPending}
-            >
-              {commandLabels[controls.primary]}
-            </button>
-          )}
-          {controls.finishEarly && (
-            <button
-              className={styles.secondaryButton}
-              type="submit"
-              name="command"
-              value="FINISH_GAME"
-              disabled={isPending}
-            >
-              Finish game early
+      <form action={commandAction} className={styles.commandForm}>
+        {snapshot.status === "IDLE" && <RevealOrderPicker defaultRevealOrder={defaultRevealOrder} />}
+        <div className={styles.controls}>
+          <div className={styles.primarySlot}>
+            {controls.primary && (
+              <button
+                className={styles.primaryButton}
+                type="submit"
+                name="command"
+                value={controls.primary}
+                disabled={isPending}
+              >
+                {commandLabels[controls.primary]}
+              </button>
+            )}
+            {controls.finishEarly && (
+              <button
+                className={styles.secondaryButton}
+                type="submit"
+                name="command"
+                value="FINISH_GAME"
+                disabled={isPending}
+              >
+                Finish game early
+              </button>
+            )}
+          </div>
+          {controls.end && (
+            <button className={styles.endButton} type="submit" name="command" value="END_GAME" disabled={isPending}>
+              {snapshot.status === "FINISHED" ? "Close game" : commandLabels.END_GAME}
             </button>
           )}
         </div>
-        {controls.end && (
-          <button className={styles.endButton} type="submit" name="command" value="END_GAME" disabled={isPending}>
-            {snapshot.status === "FINISHED" ? "Close game" : commandLabels.END_GAME}
-          </button>
-        )}
       </form>
 
       {feedback && (
@@ -219,9 +253,7 @@ export function HostPanel({
               <p className={styles.context}>{snapshot.round.question.context}</p>
             )}
             <h2 className={styles.prompt}>{snapshot.round.question.prompt}</h2>
-            {(snapshot.status === "REVEAL" || snapshot.status === "RESULT") && (
-              <p className={styles.hint}>Reveal order: {revealOrderLabels[snapshot.revealOrder]}</p>
-            )}
+            {hostRound && <p className={styles.hint}>Reveal order: {revealOrderLabels[hostRound.revealOrder]}</p>}
 
             <HostRoundOutcome snapshot={snapshot} hostRound={hostRound} onHostVote={onHostVote} />
           </>

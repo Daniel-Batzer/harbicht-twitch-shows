@@ -1,0 +1,51 @@
+@use "../../../../styles/tokens" as *;
+
+.meter {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+// "?" and the percentage share one cell, so the swap does not move anything.
+.numbers {
+  display: grid;
+  place-items: center;
+  font-size: 88px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.mystery,
+.percentage {
+  grid-area: 1 / 1;
+}
+
+.mystery {
+  opacity: 0.55;
+}
+
+.votes {
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.track {
+  width: 100%;
+  height: 20px;
+  margin-top: 8px;
+  border-radius: $radius-pill;
+  background: rgba(18, 6, 43, 0.25);
+  overflow: hidden;
+}
+
+// Full width; Motion scales it to the option's share from the left.
+.fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: $color-night;
+  transform-origin: left center;
+}

@@ -73,6 +73,15 @@
   }
 }
 
+.warning {
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: rgba(255, 210, 63, 0.12);
+  border: 2px dashed $color-gold;
+  color: $color-gold;
+  font-weight: 700;
+}
+
 .feedback {
   padding: 12px 18px;
   border-radius: 12px;

@@ -61,10 +61,10 @@ Done:
 
 Known limitations:
 
-- The reveal order can only be changed in code (`DEFAULT_REVEAL_ORDER` in `game-service.ts`). A per-game switch on the host panel is a planned follow-up.
+- ~~The reveal order can only be changed in code.~~ Resolved in Slice 4: per-game choice on the host start form.
 - Overlay texts are English only. Bilingual texts with a language choice for the host are a later juicing pass.
 - `/host` only updates after its own actions. Votes from other sources will need host polling (Phase 5).
-- The overlay gives no live feedback for incoming votes yet (Phase 4).
+- The overlay gives no live feedback for incoming votes yet (deferred in Slice 4, needs a faster transport).
 - The simulated-viewer controls are available in every environment (Decision 043, revisit in Phase 5).
 - Percentages are rounded per option, so their sum may be 99 or 101.
 
@@ -73,7 +73,7 @@ Pending:
 - **Motion integration** (still open from Slices 1 and 2).
 - Manual OBS check (see Slice 1).
 
-Open points from playtesting (for Phase 4 unless noted):
+Open points from playtesting (all addressed in Slice 4, see there and Decision 045):
 
 - **Rules for rounds without a host vote.** Without a host vote the host-pick step has nothing to uncover (with `AUDIENCE_FIRST`, RESULT only says "Chat has spoken"). Options: a warning on the host panel before locking, an explicit "Louis sat this one out" moment, or merging both reveal steps when the host did not vote.
 - **"And chat says…" is a placeholder.** The banner promises suspense while the numbers are already visible. The numbers should follow the banner (e.g. bars counting up).
@@ -81,4 +81,31 @@ Open points from playtesting (for Phase 4 unless noted):
 - **Spotlight design.** The current CSS light cone is a first version and needs a nicer look.
 - **Reveal-order switch** on the host panel, per game (see Decision 044).
 
-Next: Motion follow-up / Phase 4 reveal presentation, or Phase 5 Twitch chat voting.
+## Phase 4 / Slice 4 – Reveal Presentation and Motion
+
+Status: **implemented, manual playtest and OBS check pending**
+
+Done:
+
+- Reveal choreography (Decision 045). `getRoundPresentation` (`src/features/game/components/overlay/round-presentation.ts`) derives from the snapshot when each beat happens: banner lead and payoff, bar fill and count-up per card, spotlight and sash on the host's pick, winner crowning, and each card's focus (normal, locked, stepped back). All times live in `REVEAL_TIMING`. It replaces `phase-banner.ts`.
+- REVEAL and RESULT now differ in both reveal orders: suspense first, then the numbers. The winner is crowned only as the last beat of RESULT, followed by the verdict. Rounds without a host vote ("Louis sat this one out"), ties and rounds without votes have defined paths.
+- First Motion code (`motion/react`): answer cards (staggered spring entrance, focus filter, crown, winner growth, impact when the sash lands), banner (lead pops in, payoff slams over it, one-off shake), spotlight (beam and floor light, redesigned), sash slam and wobble, `ResultMeter` (bar `scaleX` and a count-up driven by Motion values). The matching SCSS keyframes are gone; SCSS keeps the looping pulse, drumroll and crown glow on separate elements.
+- Reduced motion: `MotionConfig reducedMotion="user"` around the overlay, the count-up jumps when reduced motion is requested, and the SCSS loops stop under `prefers-reduced-motion`.
+- `/host`: reveal order chosen per game on the start form (preselected `AUDIENCE_FIRST`, Zod-validated, `INVALID_REVEAL_ORDER` on bad input). The current order is shown in every round phase (`HostRoundView.revealOrder`). While voting is open the host is warned if they have not voted.
+- The overlay's polling hook ignores unchanged snapshots, so a poll alone never re-renders the stage.
+- Tests: `round-presentation.test.ts` covers both orders × {host won, host lost, host in a tie, no host vote, no votes}. It checks that REVEAL never crowns, that the crowning comes after everything new in RESULT, that only uncovered data is shown, focus timelines, and the banner texts.
+
+Known limitations:
+
+- An overlay reload replays the current phase's beats. A skipped phase (two host clicks within one poll) shows the later phase's beats only.
+- If the host clicks on before a phase's beats are done, the beats are cut short (nothing breaks, Motion retargets).
+- The question card, round-to-round transitions and the game-over card are still SCSS only.
+- Percentages are still rounded per option (sum may be 99 or 101).
+- Timings in `REVEAL_TIMING` are first values and need tuning in a real playtest.
+
+Pending:
+
+- Manual playtest: both orders × {host won, host lost, tie, no host vote, no votes}, a fast click during the REVEAL beats, an overlay reload during RESULT, the reveal-order choice.
+- Manual OBS check (see Slice 1).
+
+Next: Motion follow-up for the question card and round transitions, or Phase 5 Twitch chat voting.

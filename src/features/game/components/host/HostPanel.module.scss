@@ -56,6 +56,60 @@
   }
 }
 
+.commandForm {
+  display: grid;
+  gap: 20px;
+}
+
+.revealOrder {
+  padding: 16px 20px 20px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  border: 2px solid $color-night-raised;
+  border-radius: $radius-card;
+}
+
+.revealOrderLegend {
+  padding: 0 8px;
+  color: $color-ink-muted;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.revealOrderOption {
+  padding: 14px 18px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  align-items: center;
+  border-radius: 16px;
+  background: $color-night-raised;
+  border: 3px solid transparent;
+  cursor: pointer;
+
+  input {
+    accent-color: $color-gold;
+  }
+
+  &:has(input:checked) {
+    border-color: $color-gold;
+    box-shadow: $glow-gold;
+  }
+}
+
+.revealOrderTitle {
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.revealOrderDescription {
+  grid-column: 2;
+  color: $color-ink-muted;
+  font-size: 15px;
+}
+
 .controls {
   display: flex;
   align-items: center;

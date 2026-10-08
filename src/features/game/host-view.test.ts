@@ -39,14 +39,14 @@ describe("toHostRoundView", () => {
     (status) => {
       const view = toHostRoundView({ status, session, currentRound: { id: "r2", number: 2, question } });
 
-      expect(view).toEqual({ voteCount: 2, hostOptionId: "b" });
+      expect(view).toEqual({ voteCount: 2, hostOptionId: "b", revealOrder: "AUDIENCE_FIRST" });
     },
   );
 
   it("reports no host choice when the host has not voted in the current round", () => {
     const view = toHostRoundView({ status: "VOTING", session, currentRound: { id: "r3", number: 3, question } });
 
-    expect(view).toEqual({ voteCount: 0, hostOptionId: null });
+    expect(view).toEqual({ voteCount: 0, hostOptionId: null, revealOrder: "AUDIENCE_FIRST" });
   });
 
   it("is null when no round is in progress", () => {

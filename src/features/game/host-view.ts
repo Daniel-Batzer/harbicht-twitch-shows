@@ -1,5 +1,5 @@
 import { findParticipantVote, getRoundVotes } from "../voting/domain/vote";
-import type { GameState } from "./domain/game-state";
+import type { GameState, RevealOrder } from "./domain/game-state";
 
 // HOST-ONLY view of the current round. Unlike the public GameSnapshot it may
 // contain data that must stay hidden from the overlay while voting runs (the
@@ -12,6 +12,8 @@ export type HostRoundView = {
   voteCount: number;
   /** The host's current choice in this round, or null if they have not voted. */
   hostOptionId: string | null;
+  /** The session's reveal order, so the host knows what REVEAL will uncover before it happens. */
+  revealOrder: RevealOrder;
 };
 
 /** Available in every round phase; null only when no round is in progress (IDLE, FINISHED). */
@@ -23,5 +25,6 @@ export function toHostRoundView(state: GameState): HostRoundView | null {
   return {
     voteCount: getRoundVotes(session.votes, currentRound.id).length,
     hostOptionId: hostVote?.optionId ?? null,
+    revealOrder: session.revealOrder,
   };
 }

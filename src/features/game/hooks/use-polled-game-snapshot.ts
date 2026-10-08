@@ -15,6 +15,9 @@ export function usePolledGameSnapshot(): GameSnapshot | null {
 
   useEffect(() => {
     const abortController = new AbortController();
+    // An unchanged snapshot keeps the previous object, so a poll alone never
+    // re-renders the overlay or restarts its reveal animations.
+    let lastSnapshotJson: string | null = null;
 
     async function fetchSnapshot() {
       try {
@@ -23,7 +26,10 @@ export function usePolledGameSnapshot(): GameSnapshot | null {
           signal: abortController.signal,
         });
         if (!response.ok) throw new Error(`Unexpected status ${response.status}`);
-        setSnapshot((await response.json()) as GameSnapshot);
+        const snapshotJson = await response.text();
+        if (snapshotJson === lastSnapshotJson) return;
+        lastSnapshotJson = snapshotJson;
+        setSnapshot(JSON.parse(snapshotJson) as GameSnapshot);
       } catch (error) {
         if (abortController.signal.aborted) return;
         // Keep showing the last good snapshot; the next poll retries.

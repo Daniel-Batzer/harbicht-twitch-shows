@@ -1319,10 +1319,10 @@ type RevealOrder = "AUDIENCE_FIRST" | "HOST_FIRST";
 - **No new states.** The state machine stays `LOCKED → REVEAL → RESULT`, and there is no generic reveal-sequence system.
 - The order is part of `GameSettings`, is stored in the session by `startGame`, and stays fixed for the session. The domain only stores it.
 - The public snapshot projection (`toGameSnapshot`) interprets it. REVEAL carries either `result` or `host`, and RESULT carries both, plus `hostPickedWinner`: whether the host's choice is among the winners (also on a tie), or `null` if the host did not vote. Components never see data that is not uncovered yet.
-- There is no settings UI yet. The service default is `AUDIENCE_FIRST`. A per-game switch on the host panel is a planned follow-up, and only that form and the service call need to change for it.
+- The host chooses the order per game on the `/host` start form (Slice 4). The service default `AUDIENCE_FIRST` is preselected. The Server Action validates the field with Zod and rejects a missing or unknown value (`INVALID_REVEAL_ORDER`) instead of silently falling back.
 - The host dashboard shows the audience result at the same moment as the overlay, so the reveal is a surprise for the streamer too.
 - **Host display name:** `HOST_DISPLAY_NAME` (server-side env variable, validated with Zod, falls back to `Host`). It is passed into the snapshot projection as presentation data and is not stored in the domain. Phase 5 replaces it with the broadcaster's Twitch display name.
-- Overlay presentation (SCSS only): the phase that uncovers the host's choice shakes the banner ("Louis picked…", "Chat agrees with Louis!"), then slams a sash with the host's name onto their card and puts a spotlight on it.
+- Overlay presentation: the phase that uncovers the host's choice shakes the banner ("Louis picked…"), then slams a sash with the host's name onto their card and puts a spotlight on it. The full choreography is Decision 045.
 
 ## Reason
 
@@ -1335,8 +1335,54 @@ Showing the full distribution in REVEAL and only adding a winner ring in RESULT 
 
 ## Revisit When
 
-- A settings UI exists (per-game switch on the host panel).
-- Phase 4 adds Motion choreography for the reveal.
+- PREPARE gets real content: the reveal-order choice could move there.
+
+---
+
+# Decision 045 – Reveal Choreography
+
+## Status
+
+Accepted
+
+## Decision
+
+REVEAL and RESULT are presented as timed beats with Motion. The beats are presentation only: the state machine, the snapshot contract and the voting rules are unchanged, and the host still moves REVEAL → RESULT by hand (Decision 042).
+
+- **One pure module decides what happens when:** `getRoundPresentation(snapshot)` in `src/features/game/components/overlay/round-presentation.ts`. It returns the banner (a lead line, and a payoff that replaces it once the phase's last beat has landed) and, per answer card, when its bar fills, when the host's spotlight and sash land, when it is crowned, and how its focus changes. All times are seconds from the moment the overlay receives the phase and live in one named table, `REVEAL_TIMING`. The components only turn these values into Motion targets and delays; there is no generic timeline system.
+- **Beats per reveal order:**
+
+| | REVEAL | RESULT |
+|---|---|---|
+| `AUDIENCE_FIRST` | suspense ("And chat says…", empty bars with "?"), then bars fill and percentages count up in option order, payoff "The votes are in!" | "Louis picked…", spotlight, the other cards step back, sash lands; then the winners are crowned and the verdict follows |
+| `HOST_FIRST` | "Louis picked…", spotlight, sash; payoff "Will chat agree?" | suspense, the stepped-back cards return, bars fill; then the winners are crowned and the verdict follows |
+
+- **Winner emphasis is always the last beat of RESULT**, in both orders, and never part of REVEAL. It comes after everything new in RESULT has landed. Winners get a gold ring, a "Winner" tag and grow slightly; cards that neither won nor are the host's pick step back.
+- **No host vote:** the overlay says "Louis sat this one out" instead of the host beat (no spotlight, no sash), and RESULT still crowns the winners, ending with "Chat has spoken!". `HOST_FIRST` REVEAL then hands over with "It's all up to chat!". While voting is open, `/host` warns the host that the host-pick reveal will be skipped without their vote. It does not block locking.
+- **Nobody voted:** bars stay empty with "No votes", nobody is crowned, and the payoff is "No votes this round".
+- **Ties:** every winner is crowned. The verdict keeps the `hostPickedWinner` rule: a host in the tie counts as agreement.
+- **Robust against skipped phases:** a beat that an earlier phase already uncovered has time 0 in the next phase. Elements already on screen do not animate again, and elements that mount late (overlay reload, a phase skipped between two polls) appear right away. If the host clicks on before a phase's beats are done, the running Motion animations retarget and the new phase starts at 0. The polling hook no longer re-renders when a poll returns an unchanged snapshot.
+- **SCSS ↔ Motion boundary:** Motion owns `transform`, `opacity` and `filter` of the animated overlay elements (answer cards, banner lines, spotlight, sash, crown, result bars). SCSS draws them, keeps the looping effects (voting pulse, drumroll, crown glow) on separate elements, and does not animate the same properties. The question card is still SCSS only.
+- **Reduced motion:** the overlay is wrapped in `<MotionConfig reducedMotion="user">`, so Motion skips transform animations when the viewer asks for reduced motion and keeps fades. The standalone count-up checks `useReducedMotion()` and jumps to the number, and SCSS turns its loops off under `prefers-reduced-motion`.
+- React Motion APIs are imported from `motion/react` only (the existing `motion` dependency).
+
+## Reason
+
+Playtesting showed that REVEAL and RESULT felt alike, that "And chat says…" promised suspense while the numbers were already visible, and that the winner ring arrived before the last step had anything left to show. Giving every phase a lead, its own beats and a payoff, and keeping the crowning for the end of RESULT, gives both phases a real moment in either order, including rounds without a host vote.
+
+## Alternatives
+
+- Extra states or an automatic REVEAL → RESULT transition: more transitions for what is presentation timing, and they would turn the beats into game timers (Phase 6).
+- Crowning the winner at the end of REVEAL with `AUDIENCE_FIRST`: the leading option is obvious from the numbers anyway, but RESULT would then only add the host's pick again.
+- Merging both reveal steps when the host did not vote: needs an automatic transition or a state change.
+- Beat timers in React state (`setTimeout`): more moving parts than Motion delays, and harder to keep in sync with interrupted animations.
+
+## Revisit When
+
+- Live vote feedback during VOTING or a faster transport (Decision 041) makes the overlay react between polls.
+- Sound (ARCHITECTURE §24) needs cues at the same beats; it should read the same `REVEAL_TIMING`.
+- The question card and round-to-round transitions move to Motion as well.
+- Percentages that do not add up to 100 look wrong next to the count-up (Decision 043).
 
 ---
 

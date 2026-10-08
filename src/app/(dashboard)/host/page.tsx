@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { HostPanel } from "@/features/game/components/host/HostPanel";
-import { getAvailableHostCommands, getGameSnapshot, getHostRoundView } from "@/features/game/services/game-service";
+import {
+  DEFAULT_REVEAL_ORDER,
+  getAvailableHostCommands,
+  getGameSnapshot,
+  getHostRoundView,
+} from "@/features/game/services/game-service";
 import { castHostVoteAction, castSimulatedVoteAction, runHostCommandAction, simulateRandomVotesAction } from "./actions";
 
 export const metadata: Metadata = {
@@ -21,6 +26,7 @@ export default async function HostPage() {
       snapshot={snapshot}
       hostRound={hostRound}
       availableCommands={availableCommands}
+      defaultRevealOrder={DEFAULT_REVEAL_ORDER}
       onCommand={runHostCommandAction}
       onHostVote={castHostVoteAction}
       onSimulatedVote={castSimulatedVoteAction}

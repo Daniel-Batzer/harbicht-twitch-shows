@@ -30,6 +30,13 @@ export function HostVoteControls({ options, hostOptionId, voteCount, isVotingOpe
         </span>
       </header>
 
+      {/* Without a host vote the round has no host-pick moment; the overlay says so instead (Decision 045). */}
+      {isVotingOpen && !hostOption && (
+        <p className={styles.warning}>
+          You haven&apos;t voted yet. Without your vote, the host-pick reveal is skipped this round.
+        </p>
+      )}
+
       {isVotingOpen ? (
         // One form; the clicked button submits its own option id.
         <form action={voteAction} className={styles.options}>

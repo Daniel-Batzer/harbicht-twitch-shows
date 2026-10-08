@@ -22,7 +22,9 @@ export type GameStatus = "IDLE" | RoundPhase | "FINISHED";
  * the host's choice in RESULT; HOST_FIRST does it the other way around.
  * The domain only stores it; the snapshot projection interprets it.
  */
-export type RevealOrder = "AUDIENCE_FIRST" | "HOST_FIRST";
+export const REVEAL_ORDERS = ["AUDIENCE_FIRST", "HOST_FIRST"] as const;
+
+export type RevealOrder = (typeof REVEAL_ORDERS)[number];
 
 export type GameSession = {
   id: string;

@@ -27,8 +27,8 @@ import { readHostDisplayName } from "./host-display-name";
 /** Spec §4: not hard-coded in the domain; five rounds is the initial default. */
 const DEFAULT_TOTAL_ROUNDS = 5;
 
-/** No settings UI yet (Decision 044); the reveal order is chosen here. */
-const DEFAULT_REVEAL_ORDER: RevealOrder = "AUDIENCE_FIRST";
+/** Preselected on the host's start form and used when no order is given (Decision 044). */
+export const DEFAULT_REVEAL_ORDER: RevealOrder = "AUDIENCE_FIRST";
 
 /** DEV: random votes are drawn from this many simulated viewers. */
 const SIMULATED_VIEWER_POOL_SIZE = 30;
@@ -52,12 +52,17 @@ export function getAvailableHostCommands(): GameCommand[] {
   return getAvailableCommands(readGameState());
 }
 
-export function runGameCommand(command: GameCommand): TransitionResult {
+/** Per-game choices of the host. Only START_GAME reads them; the session keeps them until it ends. */
+export type GameCommandOptions = {
+  revealOrder?: RevealOrder;
+};
+
+export function runGameCommand(command: GameCommand, options: GameCommandOptions = {}): TransitionResult {
   const result = applyGameCommand(readGameState(), command, {
     deck: defaultDeck,
     totalRounds: DEFAULT_TOTAL_ROUNDS,
     hostParticipantId: LOCAL_HOST_PARTICIPANT_ID,
-    revealOrder: DEFAULT_REVEAL_ORDER,
+    revealOrder: options.revealOrder ?? DEFAULT_REVEAL_ORDER,
     randomNumber: Math.random,
     createId: () => crypto.randomUUID(),
   });
