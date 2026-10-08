@@ -62,13 +62,14 @@ Browser – Host Dashboard
         ├── Game logic
         ├── Question selection
         ├── Local voting state
-        └── API / server logic
+        ├── API / server logic
+        └── Twitch EventSub WebSocket (chat votes, Phase 5) ◄── Twitch
         │
         ▼
 Browser – OBS Overlay
 ```
 
-Initially, both the host dashboard and OBS overlay are part of the same Next.js application.
+Initially, both the host dashboard and OBS overlay are part of the same Next.js application. Since Phase 5 the Twitch chat connection also runs inside the Next.js server process (Decision 046); a separate worker is still deferred (§41).
 
 This avoids introducing unnecessary separate applications before they provide real value.
 
@@ -680,22 +681,28 @@ Licensing of sound assets must be considered before public distribution.
 
 ## 25. Twitch Adapter
 
-Twitch-specific code should be isolated.
-
-Conceptual structure:
+Twitch-specific code is isolated in `src/features/twitch/` (Decision 046):
 
 ```text
 features/
 └── twitch/
-    ├── twitch-client
-    ├── event-parser
-    ├── chat-vote-adapter
-    └── channel-point-adapter
+    ├── twitch-config.ts            Zod-validated TWITCH_* environment
+    ├── twitch-api.ts               OAuth (code grant, refresh, validate), create EventSub subscription
+    ├── oauth-state-cookie.ts       CSRF state cookie for the OAuth redirect
+    ├── eventsub-messages.ts        Zod schemas, readEventSubFrame (envelope → dedup → payload)
+    ├── eventsub-client.ts          one WebSocket session incl. session_reconnect and keepalive watchdog
+    ├── twitch-connection.ts        lifecycle: subscribe, reconnect/backoff, hourly validation, refresh, status view
+    ├── twitch-connection-store.ts  in-memory runtime on globalThis (tokens never leave memory)
+    ├── recent-message-ids.ts       bounded EventSub message-id de-duplication
+    ├── chat-vote-command.ts        `!vote N` parser
+    ├── chat-vote-adapter.ts        chat event → platform-neutral ChatVote
+    ├── chat-message-handler.ts     validate → adapt → castChatVote
+    └── components/TwitchConnectionPanel.tsx
 ```
 
-Names are illustrative.
+Routes: `/api/twitch/auth/start` and `/api/twitch/auth/callback`. Channel Point redemptions (Phase 9) will get their own adapter next to the chat one.
 
-The goal is that the rest of the game does not need to understand raw Twitch EventSub payloads.
+The rest of the game never sees raw EventSub payloads or Twitch user ids. The game service reads only the broadcaster's participant id from the store, to set the host identity of a new game.
 
 ---
 
@@ -713,18 +720,26 @@ viewer123:
 Adapter responsibility:
 
 ```text
-raw Twitch event
+WebSocket frame
         ↓
-validate
+JSON + Zod envelope            (eventsub-messages.ts)
         ↓
-identify Twitch user
+de-duplicate message_id
         ↓
-parse vote command
+Zod payload + chat event
         ↓
-create domain vote input
+channel / Shared Chat check    (chat-vote-adapter.ts)
+        ↓
+parse `!vote N`                (chat-vote-command.ts)
+        ↓
+ChatVote { participantId: twitch:<id>, optionNumber }
+        ↓
+number → optionId, broadcaster → session host, source CHAT   (game/chat-vote-input.ts)
+        ↓
+castVote                       (unchanged domain rules)
 ```
 
-The game domain then decides whether the vote is valid.
+The game domain then decides whether the vote is valid. The application layer only sees opaque participant ids. The broadcaster's chat votes count as the host's vote (`session.hostParticipantId`), so the host can never vote twice.
 
 ---
 
@@ -919,6 +934,7 @@ Expected future environment variables may include:
 ```text
 TWITCH_CLIENT_ID
 TWITCH_CLIENT_SECRET
+TWITCH_REDIRECT_URI
 DATABASE_URL
 ```
 
@@ -1253,7 +1269,7 @@ Utility classes    clsx
 Package manager    npm
 Database           PostgreSQL planned
 ORM                Prisma planned
-Twitch             EventSub planned
+Twitch             EventSub WebSocket (chat), since Phase 5
 ```
 
 Currently intentionally undecided:

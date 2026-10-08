@@ -1,7 +1,16 @@
 "use client";
 
 import { useActionState } from "react";
-import { REVEAL_ORDERS, type GameCommand, type RevealOrder, type TransitionFailure } from "../../domain/game-state";
+import { TwitchConnectionPanel } from "../../../twitch/components/TwitchConnectionPanel";
+import type { TwitchStatusView } from "../../../twitch/twitch-connection";
+import {
+  REVEAL_ORDERS,
+  SHARED_CHAT_VOTING_MODES,
+  type GameCommand,
+  type RevealOrder,
+  type SharedChatVotingMode,
+  type TransitionFailure,
+} from "../../domain/game-state";
 import { getRevealedResult, type GameSnapshot, type RoundPhaseSnapshot } from "../../game-snapshot";
 import type { HostRoundView } from "../../host-view";
 import { HostResultSummary } from "./HostResultSummary";
@@ -14,7 +23,11 @@ import styles from "./HostPanel.module.scss";
  * Failures the host can see: domain transition failures, plus input that never
  * reached the domain because it was not a valid command or setting.
  */
-export type HostActionFailure = TransitionFailure | { reason: "UNKNOWN_COMMAND" } | { reason: "INVALID_REVEAL_ORDER" };
+export type HostActionFailure =
+  | TransitionFailure
+  | { reason: "UNKNOWN_COMMAND" }
+  | { reason: "INVALID_REVEAL_ORDER" }
+  | { reason: "INVALID_SHARED_CHAT_MODE" };
 export type HostActionFeedback = { failure: HostActionFailure } | null;
 type HostCommandAction = (previousFeedback: HostActionFeedback, formData: FormData) => Promise<HostActionFeedback>;
 
@@ -26,10 +39,16 @@ type HostPanelProps = {
   availableCommands: GameCommand[];
   /** Preselected when a new game is started. */
   defaultRevealOrder: RevealOrder;
+  /** Preselected when a new game is started. */
+  defaultSharedChatVotingMode: SharedChatVotingMode;
+  twitchStatus: TwitchStatusView;
+  /** DEV: the simulated-viewer controls exist only in development. */
+  isVoteSimulationEnabled: boolean;
   onCommand: HostCommandAction;
   onHostVote: HostVoteAction;
   onSimulatedVote: HostVoteAction;
   onRandomVotes: HostVoteAction;
+  onTwitchDisconnect: () => Promise<void>;
 };
 
 const commandLabels: Record<GameCommand, string> = {
@@ -85,21 +104,47 @@ const revealOrderTitles: Record<RevealOrder, string> = {
   HOST_FIRST: "Host first",
 };
 
+const sharedChatModeLabels: Record<SharedChatVotingMode, string> = {
+  OWN_CHANNEL_ONLY: "only votes from your own chat count",
+  INCLUDE_SHARED_CHAT: "votes from Shared Chat partner channels count too",
+};
+
+const sharedChatModeTitles: Record<SharedChatVotingMode, string> = {
+  OWN_CHANNEL_ONLY: "Own channel only",
+  INCLUDE_SHARED_CHAT: "Include Shared Chat",
+};
+
 /** Part of the start form: the order applies to the game that is about to start and stays fixed until it ends. */
 function RevealOrderPicker({ defaultRevealOrder }: { defaultRevealOrder: RevealOrder }) {
   return (
-    <fieldset className={styles.revealOrder}>
-      <legend className={styles.revealOrderLegend}>Reveal order</legend>
+    <fieldset className={styles.choice}>
+      <legend className={styles.choiceLegend}>Reveal order</legend>
       {REVEAL_ORDERS.map((revealOrder) => (
-        <label key={revealOrder} className={styles.revealOrderOption}>
+        <label key={revealOrder} className={styles.choiceOption}>
           <input
             type="radio"
             name="revealOrder"
             value={revealOrder}
             defaultChecked={revealOrder === defaultRevealOrder}
           />
-          <span className={styles.revealOrderTitle}>{revealOrderTitles[revealOrder]}</span>
-          <span className={styles.revealOrderDescription}>Reveals {revealOrderLabels[revealOrder]}.</span>
+          <span className={styles.choiceTitle}>{revealOrderTitles[revealOrder]}</span>
+          <span className={styles.choiceDescription}>Reveals {revealOrderLabels[revealOrder]}.</span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+/** Part of the start form, like the reveal order: fixed for the whole game. Only matters during Twitch Shared Chat. */
+function SharedChatModePicker({ defaultMode }: { defaultMode: SharedChatVotingMode }) {
+  return (
+    <fieldset className={styles.choice}>
+      <legend className={styles.choiceLegend}>Shared Chat</legend>
+      {SHARED_CHAT_VOTING_MODES.map((mode) => (
+        <label key={mode} className={styles.choiceOption}>
+          <input type="radio" name="sharedChatVotingMode" value={mode} defaultChecked={mode === defaultMode} />
+          <span className={styles.choiceTitle}>{sharedChatModeTitles[mode]}</span>
+          <span className={styles.choiceDescription}>During Shared Chat, {sharedChatModeLabels[mode]}.</span>
         </label>
       ))}
     </fieldset>
@@ -166,6 +211,8 @@ function describeFailure(failure: HostActionFailure): string {
       return "Unknown command.";
     case "INVALID_REVEAL_ORDER":
       return "Choose a reveal order before starting the game.";
+    case "INVALID_SHARED_CHAT_MODE":
+      return "Choose a Shared Chat setting before starting the game.";
   }
 }
 
@@ -174,10 +221,14 @@ export function HostPanel({
   hostRound,
   availableCommands,
   defaultRevealOrder,
+  defaultSharedChatVotingMode,
+  twitchStatus,
+  isVoteSimulationEnabled,
   onCommand,
   onHostVote,
   onSimulatedVote,
   onRandomVotes,
+  onTwitchDisconnect,
 }: HostPanelProps) {
   const [feedback, commandAction, isPending] = useActionState(onCommand, null);
   const controls = arrangeHostControls(availableCommands);
@@ -191,9 +242,16 @@ export function HostPanel({
         </span>
       </header>
 
+      <TwitchConnectionPanel status={twitchStatus} onDisconnect={onTwitchDisconnect} />
+
       {/* One form; the clicked button submits its own command value. */}
       <form action={commandAction} className={styles.commandForm}>
-        {snapshot.status === "IDLE" && <RevealOrderPicker defaultRevealOrder={defaultRevealOrder} />}
+        {snapshot.status === "IDLE" && (
+          <div className={styles.startSettings}>
+            <RevealOrderPicker defaultRevealOrder={defaultRevealOrder} />
+            <SharedChatModePicker defaultMode={defaultSharedChatVotingMode} />
+          </div>
+        )}
         <div className={styles.controls}>
           <div className={styles.primarySlot}>
             {controls.primary && (
@@ -253,7 +311,12 @@ export function HostPanel({
               <p className={styles.context}>{snapshot.round.question.context}</p>
             )}
             <h2 className={styles.prompt}>{snapshot.round.question.prompt}</h2>
-            {hostRound && <p className={styles.hint}>Reveal order: {revealOrderLabels[hostRound.revealOrder]}</p>}
+            {hostRound && (
+              <p className={styles.hint}>
+                Reveal order: {revealOrderLabels[hostRound.revealOrder]}. Shared Chat:{" "}
+                {sharedChatModeLabels[hostRound.sharedChatVotingMode]}.
+              </p>
+            )}
 
             <HostRoundOutcome snapshot={snapshot} hostRound={hostRound} onHostVote={onHostVote} />
           </>
@@ -261,7 +324,7 @@ export function HostPanel({
       </section>
 
       {/* Rendered for the whole round (not only VOTING) so a rejected vote can still show its message. */}
-      {snapshot.status !== "IDLE" && snapshot.status !== "FINISHED" && (
+      {isVoteSimulationEnabled && snapshot.status !== "IDLE" && snapshot.status !== "FINISHED" && (
         <SimulatedVotesPanel
           options={snapshot.round.question.options}
           isVotingOpen={snapshot.status === "VOTING"}

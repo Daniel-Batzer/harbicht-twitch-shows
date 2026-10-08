@@ -39,6 +39,7 @@ function makeSession(revealOrder: RevealOrder, sessionVotes: Vote[] = votes): Ga
     hostParticipantId: "local:host",
     votes: sessionVotes,
     revealOrder,
+    sharedChatVotingMode: "OWN_CHANNEL_ONLY",
   };
 }
 

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MotionConfig } from "motion/react";
+import { AnimatePresence, MotionConfig } from "motion/react";
 import type { RoundPhaseSnapshot } from "../../game-snapshot";
 import { usePolledGameSnapshot } from "../../hooks/use-polled-game-snapshot";
 import { AnswerCards } from "./AnswerCards";
+import { ChatVoteHint } from "./ChatVoteHint";
 import { FinishedCard } from "./FinishedCard";
 import { PhaseBanner } from "./PhaseBanner";
 import { QuestionCard } from "./QuestionCard";
@@ -46,6 +47,9 @@ function RoundStage({ snapshot }: { snapshot: RoundPhaseSnapshot }) {
       <PhaseBanner phaseKey={snapshot.status} banner={presentation.banner} />
       {/* Answers appear when voting opens (ARCHITECTURE §22) and stay mounted for the rest of the round. */}
       {presentation.cards && <AnswerCards cards={presentation.cards} />}
+      <AnimatePresence>
+        {snapshot.status === "VOTING" && <ChatVoteHint optionCount={snapshot.round.question.options.length} />}
+      </AnimatePresence>
     </>
   );
 }

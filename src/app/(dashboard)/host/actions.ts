@@ -4,20 +4,23 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import type { HostActionFeedback } from "@/features/game/components/host/HostPanel";
 import type { HostVoteFeedback } from "@/features/game/components/host/vote-feedback";
-import { GAME_COMMANDS, REVEAL_ORDERS } from "@/features/game/domain/game-state";
+import { GAME_COMMANDS, REVEAL_ORDERS, SHARED_CHAT_VOTING_MODES } from "@/features/game/domain/game-state";
 import {
   castHostVote,
   castSimulatedVote,
+  isVoteSimulationEnabled,
   runGameCommand,
   simulateRandomVotes,
   type GameCommandOptions,
 } from "@/features/game/services/game-service";
+import { disconnectTwitch } from "@/features/twitch/twitch-connection";
 
 // A Server Action is a public endpoint, so form input is validated at this
 // boundary (Decision 029). Zod checks only the shape; whether an option belongs
 // to the current question is a game rule and decided by the domain.
 const hostCommandSchema = z.enum(GAME_COMMANDS);
 const revealOrderSchema = z.enum(REVEAL_ORDERS);
+const sharedChatVotingModeSchema = z.enum(SHARED_CHAT_VOTING_MODES);
 const optionIdSchema = z.string().min(1).max(100);
 const simulatedVoteSchema = z.object({
   viewerKey: z
@@ -37,11 +40,13 @@ export async function runHostCommandAction(
 
   const command = parsedCommand.data;
   let options: GameCommandOptions = {};
-  // The reveal order is chosen per game, so only the start form sends it.
+  // Reveal order and Shared Chat mode are chosen per game, so only the start form sends them.
   if (command === "START_GAME") {
     const parsedRevealOrder = revealOrderSchema.safeParse(formData.get("revealOrder"));
     if (!parsedRevealOrder.success) return { failure: { reason: "INVALID_REVEAL_ORDER" } };
-    options = { revealOrder: parsedRevealOrder.data };
+    const parsedSharedChatMode = sharedChatVotingModeSchema.safeParse(formData.get("sharedChatVotingMode"));
+    if (!parsedSharedChatMode.success) return { failure: { reason: "INVALID_SHARED_CHAT_MODE" } };
+    options = { revealOrder: parsedRevealOrder.data, sharedChatVotingMode: parsedSharedChatMode.data };
   }
 
   const result = runGameCommand(command, options);
@@ -68,6 +73,9 @@ export async function castSimulatedVoteAction(
   _previousFeedback: HostVoteFeedback,
   formData: FormData,
 ): Promise<HostVoteFeedback> {
+  // Server Actions stay reachable even when the panel is hidden, so the gate is enforced here.
+  if (!isVoteSimulationEnabled) return { failure: { reason: "SIMULATION_DISABLED" } };
+
   const parsed = simulatedVoteSchema.safeParse({
     viewerKey: formData.get("viewerKey"),
     optionId: formData.get("optionId"),
@@ -84,10 +92,18 @@ export async function simulateRandomVotesAction(
   _previousFeedback: HostVoteFeedback,
   formData: FormData,
 ): Promise<HostVoteFeedback> {
+  if (!isVoteSimulationEnabled) return { failure: { reason: "SIMULATION_DISABLED" } };
+
   const parsedCount = randomVotesSchema.safeParse(formData.get("count"));
   if (!parsedCount.success) return { failure: { reason: "INVALID_VOTE_INPUT" } };
 
   const result = simulateRandomVotes(parsedCount.data);
   refresh();
   return result.ok ? null : { failure: result.failure };
+}
+
+/** Closes the Twitch chat connection and forgets its tokens. Connecting again goes through Twitch's OAuth page. */
+export async function disconnectTwitchAction(): Promise<void> {
+  disconnectTwitch();
+  refresh();
 }

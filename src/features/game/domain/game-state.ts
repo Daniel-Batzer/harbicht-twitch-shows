@@ -26,6 +26,17 @@ export const REVEAL_ORDERS = ["AUDIENCE_FIRST", "HOST_FIRST"] as const;
 
 export type RevealOrder = (typeof REVEAL_ORDERS)[number];
 
+/**
+ * Chat setting: whether chat votes from partner channels in a Twitch Shared
+ * Chat session count (Decision 046). OWN_CHANNEL_ONLY accepts only messages
+ * sent in the host's own channel; INCLUDE_SHARED_CHAT accepts all of them.
+ * The domain only stores it; the chat adapter interprets it. Votes themselves
+ * never carry channel information.
+ */
+export const SHARED_CHAT_VOTING_MODES = ["OWN_CHANNEL_ONLY", "INCLUDE_SHARED_CHAT"] as const;
+
+export type SharedChatVotingMode = (typeof SHARED_CHAT_VOTING_MODES)[number];
+
 export type GameSession = {
   id: string;
   deckId: string;
@@ -41,6 +52,8 @@ export type GameSession = {
   votes: Vote[];
   /** Fixed for the whole session. */
   revealOrder: RevealOrder;
+  /** Fixed for the whole session. */
+  sharedChatVotingMode: SharedChatVotingMode;
 };
 
 export type CurrentRound = {
@@ -85,6 +98,7 @@ export type GameSettings = {
   totalRounds: number;
   hostParticipantId: ParticipantId;
   revealOrder: RevealOrder;
+  sharedChatVotingMode: SharedChatVotingMode;
 };
 
 export type GameCommandContext = RoundDependencies & GameSettings & { deck: Deck };
@@ -107,7 +121,7 @@ export function startGame(
 ): TransitionResult {
   if (state.status !== "IDLE") return invalidTransition(state, "START_GAME");
 
-  const { totalRounds, hostParticipantId, revealOrder } = settings;
+  const { totalRounds, hostParticipantId, revealOrder, sharedChatVotingMode } = settings;
   if (!Number.isInteger(totalRounds) || totalRounds < 1) {
     return { ok: false, failure: { reason: "INVALID_TOTAL_ROUNDS" } };
   }
@@ -129,6 +143,7 @@ export function startGame(
         hostParticipantId,
         votes: [],
         revealOrder,
+        sharedChatVotingMode,
       },
       currentRound: { id: dependencies.createId(), number: 1, question },
     },
@@ -222,6 +237,7 @@ export function applyGameCommand(state: GameState, command: GameCommand, context
           totalRounds: context.totalRounds,
           hostParticipantId: context.hostParticipantId,
           revealOrder: context.revealOrder,
+          sharedChatVotingMode: context.sharedChatVotingMode,
         },
         context,
       );

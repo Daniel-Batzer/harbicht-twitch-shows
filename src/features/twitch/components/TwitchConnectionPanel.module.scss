@@ -1,0 +1,103 @@
+@use "sass:list";
+@use "../../../styles/tokens" as *;
+@use "../../game/components/host/host-button";
+
+$twitch-purple: #9146ff;
+$live-color: list.nth($answer-slot-colors, 2);
+$warning-color: list.nth($answer-slot-colors, 3);
+$error-color: list.nth($answer-slot-colors, 1);
+
+.panel {
+  --state-color: #{$color-ink-muted};
+
+  padding: 24px 28px;
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+  border-radius: $radius-card;
+  background: $color-night-raised;
+  border: 3px solid var(--state-color);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--state-color) 35%, transparent), $shadow-card;
+
+  &[data-state="CONNECTED"] {
+    --state-color: #{$live-color};
+  }
+
+  &[data-state="CONNECTING"],
+  &[data-state="RECONNECTING"] {
+    --state-color: #{$warning-color};
+  }
+
+  &[data-state="DISCONNECTED"] {
+    --state-color: #{$twitch-purple};
+  }
+}
+
+.header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.heading {
+  font-size: 20px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.badge {
+  padding: 4px 14px;
+  border-radius: $radius-pill;
+  background: var(--state-color);
+  color: $color-night;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hint {
+  color: $color-ink-muted;
+
+  code {
+    color: $color-ink;
+  }
+}
+
+.login {
+  color: $color-ink;
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  font-weight: 800;
+}
+
+.error {
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: rgba(255, 61, 127, 0.15);
+  border: 2px solid $error-color;
+}
+
+.connectButton {
+  @include host-button.host-button;
+
+  display: inline-block;
+  background: $twitch-purple;
+  color: $color-ink;
+  text-decoration: none;
+}
+
+.disconnectButton {
+  @include host-button.host-button;
+
+  padding: 10px 22px;
+  font-size: 16px;
+  background: $color-night;
+  border: 2px solid $color-ink-muted;
+  color: $color-ink-muted;
+}

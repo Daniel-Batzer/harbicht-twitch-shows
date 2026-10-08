@@ -1291,7 +1291,7 @@ Phase 3 implements voting locally, with simulated viewers instead of Twitch chat
 
 ## Revisit When
 
-- Phase 5 (Twitch chat): add `CHAT` and the `twitch:` ids, map `!vote N` to an option id in the adapter, decide on event de-duplication and whether event timestamps should order votes, and remove or gate the simulated-viewer controls.
+- ~~Phase 5 (Twitch chat): add `CHAT` and the `twitch:` ids, map `!vote N` to an option id in the adapter, decide on event de-duplication and whether event timestamps should order votes, and remove or gate the simulated-viewer controls.~~ Done in Decision 046: `CHAT` and `twitch:` ids added, EventSub message ids are de-duplicated, processing order still decides "latest", and the simulated-viewer controls are development-only.
 - Phase 4 (reveal): whether percentages should add up to exactly 100, and live vote feedback in the overlay.
 - Phase 7 (persistence): `session.votes` becomes a table. `playedQuestionIds` and a per-round history can then be derived from stored rounds.
 
@@ -1383,6 +1383,56 @@ Playtesting showed that REVEAL and RESULT felt alike, that "And chat says…" pr
 - Sound (ARCHITECTURE §24) needs cues at the same beats; it should read the same `REVEAL_TIMING`.
 - The question card and round-to-round transitions move to Motion as well.
 - Percentages that do not add up to 100 look wrong next to the count-up (Decision 043).
+
+---
+
+# Decision 046 – Twitch Chat Voting
+
+## Status
+
+Accepted
+
+## Decision
+
+Phase 5 connects Twitch chat as the first real vote source. Chat votes enter the existing `castVote` rules unchanged. Requirements imposed by Twitch are marked **[Twitch]**. Everything else is our choice.
+
+- **Transport and subscription:** EventSub over WebSocket (`wss://eventsub.wss.twitch.tv/ws`), subscription `channel.chat.message` version 1 with condition `broadcaster_user_id = user_id = <broadcaster>`. **[Twitch]** WebSocket subscriptions require a user access token. Reading chat needs only `user:read:chat` from the reading user. `user:bot`/`channel:bot` are only required with app access tokens. Webhooks would need a public HTTPS endpoint and an app token, so they are not used. IRC is not used either.
+- **No bot account (Decision 020 holds):** the broadcaster reads their own chat with their own token. **[Twitch]** Twitch documents this for "installed chatbots": a single user access token from the broadcaster is enough.
+- **Authentication:** server-side Authorization Code Grant, started from `/host` (`/api/twitch/auth/start` → Twitch consent → `/api/twitch/auth/callback`). The only scope is `user:read:chat`. CSRF protection is a random `state` in a short-lived httpOnly, SameSite=Lax cookie limited to `/api/twitch/auth`. Credentials come from `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` and `TWITCH_REDIRECT_URI`, which must match the registered redirect URL exactly. If the console offers a Confidential/Public choice, Confidential is used.
+- **Tokens stay in memory only** (`src/features/twitch/twitch-connection-store.ts`, on `globalThis` like the game store, Decision 041). They are never written to files or logged. After a server restart the host clicks "Connect Twitch" again. **[Twitch]** Tokens are validated when the OAuth session starts and hourly afterwards, and refreshed reactively on HTTP 401. A rotated refresh token is kept. The token lifetime is not assumed: `expires_in` is kept as metadata only.
+- **Connection lifecycle** (`twitch-connection.ts`, `eventsub-client.ts`): open the socket, then **[Twitch]** subscribe within 10 seconds of the welcome message. A keepalive watchdog (keepalive timeout plus 5 s) detects silent connections. **[Twitch]** On `session_reconnect` the client opens the given URL, waits for its welcome and closes the old socket. Subscriptions move along. A lost connection reconnects with backoff (1, 2, 5, 10, then 30 s) and subscribes again, because **[Twitch]** subscriptions are disabled when their socket closes. Chat sent during the gap is lost. A revocation or an unrecoverable token ends the connection, and the host has to connect again. A generation counter drops results of async work that belongs to an older connection. Starting a connection always closes the previous one, so HMR or a double click never leaves two connections running.
+- **Runtime:** the socket lives in the Next.js server process (`next dev` / `next start`), not in a worker (Decision 030 stays). It uses Node's built-in `WebSocket`, `fetch` and Zod, and adds no dependency (no Twitch SDK). It does not work on serverless hosting.
+- **Adapter boundary:** all Twitch-specific code is in `src/features/twitch/`. The pipeline is: WebSocket frame → `JSON.parse` → Zod envelope → **de-duplication by `metadata.message_id`** → Zod payload per message type (`readEventSubFrame`) → Zod `channel.chat.message` event → `toChatVote`. `toChatVote` checks the channel and the Shared Chat mode, parses `!vote N` and turns `chatter_user_id` into `twitch:<id>`. The result is a platform-neutral `ChatVote { participantId, optionNumber }` (`src/features/game/chat-vote-input.ts`). The application layer never sees a Twitch user id. `toChatVoteInput` maps the 1-based number to the option at that position (`findOptionIdByNumber`, the same number as the overlay badge), tags the vote `CHAT`, and then `castVote` decides as before. No field of an external payload is read before it has been validated.
+- **De-duplication:** **[Twitch]** delivery is at least once, and a resend keeps its message id. A bounded set of the last 1000 message ids prevents a late duplicate of `!vote 1` from overwriting the same viewer's newer `!vote 2`, also during the `session_reconnect` overlap. A frame with an invalid envelope is never remembered. A frame with a valid envelope is remembered even if its payload is invalid. Message timestamps do not order votes: processing order still decides "latest" (Decision 043).
+- **Command syntax:** `!vote N`, case-insensitive, exactly one number of one or two digits, at least 1, nothing after it. Invisible characters that chat clients append (zero-width characters, U+E0000) are stripped first. A malformed `!vote` counts as a rejected attempt. Ordinary chat is ignored. A rejected vote never touches the viewer's earlier valid vote.
+- **Identity:** viewers are `twitch:<userId>` (Decision 011). With Twitch connected, a new game's `hostParticipantId` is `twitch:<broadcasterId>`. The broadcaster's chat votes are always recorded under `session.hostParticipantId`. A dashboard vote and a chat vote of the host therefore replace each other, even if the game started before Twitch was connected (`local:host`). The vote source stays `CHAT`.
+- **Shared Chat:** a per-session setting `SharedChatVotingMode` (`OWN_CHANNEL_ONLY`, the default, or `INCLUDE_SHARED_CHAT`), chosen on the start form like the reveal order. The game domain stores it and never interprets it. Only the Twitch adapter reads `source_broadcaster_user_id`. Votes carry no channel data. A viewer seen through several channels still has one participant id and one vote.
+- **Host dashboard:** a Twitch panel shows not configured / offline / connecting / live / reconnecting, the connected login, counted and rejected chat votes, the time since the last chat message, the last error in plain words, and Connect/Disconnect. Disconnect closes the connection and forgets the tokens. A failed connect attempt never disconnects a running connection. `/host` refreshes itself every 2 s (`HostAutoRefresh`, `router.refresh`), because chat votes change its data without a host action. The overlay polling is unchanged.
+- **Overlay:** while voting is open, a hint shows `!vote 1 · !vote 2 · !vote 3` (one per option, colored like the cards). Chat votes are public and are not presented as secret (Decision 017).
+- **Simulated viewers** are development-only (`NODE_ENV === "development"`). The panel is hidden otherwise, and the Server Actions reject with `SIMULATION_DISABLED`.
+- **Overlay host name:** `HOST_DISPLAY_NAME` stays. The streamer's personal name may differ from the channel name.
+
+## Reason
+
+- The roadmap asks for real chat votes without changing the voting rules or leaking Twitch payloads into the domain. Decision 043 prepared this: only the vote source and the participant id builder change.
+- WebSocket and a broadcaster user token are the smallest setup Twitch allows for a locally running app. A webhook would need public HTTPS, an app token and extra scopes.
+- In-memory tokens and a one-click connect avoid storing long-lived credentials in files until persistence exists (Phase 7).
+
+## Alternatives
+
+- Tokens in the local environment file (generated with the Twitch CLI): automatic connect on start, but long-lived secrets in a file.
+- A Twitch SDK (e.g. Twurple): handles reconnect and refresh, but it is a large dependency for one subscription.
+- A dedicated worker process: a cleaner lifecycle, but not needed while everything runs locally.
+- A Twitch-specific vote model or a Twitch user id in the application layer: rejected, because it would duplicate the rules and break the opaque-participant boundary.
+- Loose syntax (`!vote 2 lol`, `!2`, `A/B/C`): can be added later. Tightening the syntax later would break viewer habits.
+
+## Revisit When
+
+- Deployment (Phase 15): serverless hosting, an unauthenticated `/host`, and a worker for the connection lifecycle.
+- Persistence (Phase 7): whether tokens should survive restarts.
+- Timers (Phase 6): a grace period for chat votes typed just before locking.
+- A realtime transport (Phase 11) replaces the host auto-refresh and the overlay polling.
+- The first long playtest shows whether a subscription survives the access token's expiry (the hourly validation and refresh keep a valid token ready either way).
 
 ---
 

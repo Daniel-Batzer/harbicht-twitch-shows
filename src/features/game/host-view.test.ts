@@ -25,6 +25,7 @@ const session: GameSession = {
   playedQuestionIds: ["q0", "q1"],
   hostParticipantId: "local:host",
   revealOrder: "AUDIENCE_FIRST",
+  sharedChatVotingMode: "OWN_CHANNEL_ONLY",
   votes: [
     makeVote("local:host", "a", "r1"), // earlier round, must not count
     makeVote("local:sim-viewer-1", "b", "r1"),
@@ -39,14 +40,24 @@ describe("toHostRoundView", () => {
     (status) => {
       const view = toHostRoundView({ status, session, currentRound: { id: "r2", number: 2, question } });
 
-      expect(view).toEqual({ voteCount: 2, hostOptionId: "b", revealOrder: "AUDIENCE_FIRST" });
+      expect(view).toEqual({
+        voteCount: 2,
+        hostOptionId: "b",
+        revealOrder: "AUDIENCE_FIRST",
+        sharedChatVotingMode: "OWN_CHANNEL_ONLY",
+      });
     },
   );
 
   it("reports no host choice when the host has not voted in the current round", () => {
     const view = toHostRoundView({ status: "VOTING", session, currentRound: { id: "r3", number: 3, question } });
 
-    expect(view).toEqual({ voteCount: 0, hostOptionId: null, revealOrder: "AUDIENCE_FIRST" });
+    expect(view).toEqual({
+      voteCount: 0,
+      hostOptionId: null,
+      revealOrder: "AUDIENCE_FIRST",
+      sharedChatVotingMode: "OWN_CHANNEL_ONLY",
+    });
   });
 
   it("is null when no round is in progress", () => {

@@ -63,9 +63,9 @@ Known limitations:
 
 - ~~The reveal order can only be changed in code.~~ Resolved in Slice 4: per-game choice on the host start form.
 - Overlay texts are English only. Bilingual texts with a language choice for the host are a later juicing pass.
-- `/host` only updates after its own actions. Votes from other sources will need host polling (Phase 5).
+- ~~`/host` only updates after its own actions. Votes from other sources will need host polling (Phase 5).~~ Resolved in Slice 5: `/host` refreshes itself every 2 s.
 - The overlay gives no live feedback for incoming votes yet (deferred in Slice 4, needs a faster transport).
-- The simulated-viewer controls are available in every environment (Decision 043, revisit in Phase 5).
+- ~~The simulated-viewer controls are available in every environment (Decision 043, revisit in Phase 5).~~ Resolved in Slice 5: development only.
 - Percentages are rounded per option, so their sum may be 99 or 101.
 
 Pending:
@@ -108,4 +108,37 @@ Pending:
 - Manual playtest: both orders × {host won, host lost, tie, no host vote, no votes}, a fast click during the REVEAL beats, an overlay reload during RESULT, the reveal-order choice.
 - Manual OBS check (see Slice 1).
 
-Next: Motion follow-up for the question card and round transitions, or Phase 5 Twitch chat voting.
+## Phase 5 / Slice 5 – Twitch Chat Voting
+
+Status: **implemented, manual test on the real channel pending**
+
+Done (Decision 046):
+
+- EventSub over WebSocket with a `channel.chat.message` subscription. The broadcaster's own user token reads their own chat, so there is no bot account. The only scope is `user:read:chat`. No new dependency: Node's built-in `WebSocket`, `fetch` and Zod.
+- OAuth Authorization Code Grant from `/host` (`/api/twitch/auth/start` → Twitch → `/api/twitch/auth/callback`) with a CSRF state cookie. Tokens live in server memory only and are validated at start and hourly, and refreshed on 401. `expires_in` is metadata only.
+- Connection lifecycle: subscribe after the welcome, keepalive watchdog, `session_reconnect` migration, reconnect with backoff (1/2/5/10/30 s) after a lost connection, revocation → disconnected, Disconnect forgets the tokens. A generation counter drops stale async results, and a new connection always replaces the old one.
+- Strict validation order for external input: JSON → Zod envelope → de-duplication by EventSub `message_id` (last 1000) → Zod payload → Zod chat event.
+- `!vote N` parser (case-insensitive, one number, nothing after it, invisible chat-client characters stripped). The Twitch adapter turns the chatter into `twitch:<userId>` and hands a platform-neutral `ChatVote { participantId, optionNumber }` to the application layer. `toChatVoteInput` maps the number to the option at that position (same as the overlay badge), tags it `CHAT`, and `castVote` decides as before.
+- Host identity: a game started while Twitch is connected uses `twitch:<broadcasterId>` as the host id. The broadcaster's chat votes always map to `session.hostParticipantId`, so dashboard and chat votes of the host replace each other, even if Twitch was connected after the game started.
+- Shared Chat: per-game setting on the start form (`OWN_CHANNEL_ONLY` by default, or `INCLUDE_SHARED_CHAT`), stored in the session and interpreted only by the Twitch adapter.
+- `/host`: Twitch panel (not configured / offline / connecting / live / reconnecting, connected login, counted and rejected chat votes, last chat message, errors, Connect/Disconnect) and a 2 s auto-refresh. Simulated viewers are development-only.
+- `/overlay`: "Vote in chat · !vote 1 · !vote 2 · !vote 3" hint while voting is open. Polling is unchanged.
+- Tests: parser, frame reader (order, duplicates, invalid envelope vs. invalid payload, reconnect URL), chat event schema, adapter incl. the Shared Chat matrix, `toChatVoteInput`, chat votes through `castVote` (host dashboard + chat = one vote, invalid keeps valid, replacement, rejected after lock), `findOptionIdByNumber`.
+- Checked against Twitch: a real `session_welcome` frame matches the schema. Twitch closes an unused session after ~15 s (code 4003), so subscribing right after the welcome is required.
+
+Known limitations:
+
+- Chat sent during a reconnect gap is lost. Votes typed just before Lock that arrive after it are rejected (a grace period belongs to the timer, Phase 6).
+- Tokens are lost on server restart; the host clicks Connect again.
+- `/host` has no authentication. Anyone who can reach the dev server can connect or disconnect Twitch (must be solved before deployment).
+- The connection runs inside the Next.js server process and does not work on serverless hosting.
+- In `next dev`, a running connection keeps executing the module code it started with until it reconnects (state is on `globalThis`, so this is harmless; Disconnect/Connect picks up new code).
+- Not verified yet: whether a subscription survives the access token's expiry during a long stream.
+- The Twitch CLI mock server does not support `channel.chat.message`, so network code is tested manually.
+
+Pending:
+
+- Manual test on the own channel (stream can be offline): Connect, `!vote` from a second account, host dashboard vote + own `!vote` = one host vote, invalid and late votes, Wi-Fi off → reconnect, Disconnect, `next build && next start` hides the simulated viewers.
+- Manual OBS check (see Slice 1).
+
+Next: Motion follow-up for the question card and round transitions, or Phase 6 timer and host control improvements.

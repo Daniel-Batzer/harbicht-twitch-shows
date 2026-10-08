@@ -35,6 +35,7 @@ function makeContext(): GameCommandContext {
     totalRounds: 2,
     hostParticipantId: HOST,
     revealOrder: "AUDIENCE_FIRST",
+    sharedChatVotingMode: "OWN_CHANNEL_ONLY",
     // Always picks the first unplayed question: round 1 asks q1, round 2 asks q2.
     randomNumber: () => 0,
     createId: () => `id-${++nextId}`,

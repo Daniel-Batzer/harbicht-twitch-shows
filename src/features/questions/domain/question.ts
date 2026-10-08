@@ -20,3 +20,13 @@ export type Deck = {
   name: string;
   questions: Question[];
 };
+
+/**
+ * The option at a 1-based position in the question's order, the number the
+ * overlay shows on each answer card and chat votes refer to (`!vote 2`).
+ * Returns null when the question has no option at that position.
+ */
+export function findOptionIdByNumber(question: Question, optionNumber: number): string | null {
+  if (!Number.isInteger(optionNumber) || optionNumber < 1) return null;
+  return question.options[optionNumber - 1]?.id ?? null;
+}

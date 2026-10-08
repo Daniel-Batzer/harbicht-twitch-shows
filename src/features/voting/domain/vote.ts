@@ -10,10 +10,11 @@ export type ParticipantId = string;
 
 /**
  * The channel a vote arrived through. Whether a vote belongs to the host is
- * decided by the participant id, not by the source.
- * Phase 5 adds "CHAT", Phase 12 adds "WEB".
+ * decided by the participant id, not by the source: the host voting in Twitch
+ * chat casts a "CHAT" vote with the host's participant id.
+ * Phase 12 adds "WEB".
  */
-export type VoteSource = "HOST" | "SIMULATED";
+export type VoteSource = "HOST" | "SIMULATED" | "CHAT";
 
 /** What a vote source hands to the domain; the domain decides whether it is valid. */
 export type VoteInput = {

@@ -2,7 +2,8 @@ import { z } from "zod";
 
 // The host's name as shown on the overlay ("Louis picked…"). Configuration is
 // a boundary (Decision 029), so the environment value is validated here.
-// Phase 5 replaces this with the broadcaster's Twitch display name.
+// Deliberately not the Twitch display name: the streamer's personal name may
+// differ from the channel name (Decision 046).
 
 export const DEFAULT_HOST_DISPLAY_NAME = "Host";
 

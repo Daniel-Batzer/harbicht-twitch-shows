@@ -1,0 +1,46 @@
+@use "sass:list";
+@use "../../../../styles/tokens" as *;
+
+// Sits below the answer cards without taking part in the round's layout.
+.hint {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  translate: -50% 0;
+  margin: 0;
+  padding: 10px 14px 10px 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: $radius-pill;
+  background: $color-night;
+  border: 4px solid $color-gold;
+  box-shadow: $glow-gold;
+  font-family: $font-body;
+  white-space: nowrap;
+}
+
+.label {
+  color: $color-gold;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.command {
+  --slot-color: #{list.nth($answer-slot-colors, 1)};
+
+  padding: 6px 18px;
+  border-radius: $radius-pill;
+  background: var(--slot-color);
+  color: $color-night;
+  font-size: 26px;
+  font-weight: 900;
+
+  @for $slot from 1 through list.length($answer-slot-colors) {
+    &[data-slot="#{$slot}"] {
+      --slot-color: #{list.nth($answer-slot-colors, $slot)};
+    }
+  }
+}

@@ -53,7 +53,12 @@ function makeDependencies(randomNumber = 0): RoundDependencies {
 }
 
 function makeSettings(totalRounds: number): GameSettings {
-  return { totalRounds, hostParticipantId: HOST_PARTICIPANT_ID, revealOrder: "HOST_FIRST" };
+  return {
+    totalRounds,
+    hostParticipantId: HOST_PARTICIPANT_ID,
+    revealOrder: "HOST_FIRST",
+    sharedChatVotingMode: "INCLUDE_SHARED_CHAT",
+  };
 }
 
 function makeContext(randomNumber = 0): GameCommandContext {
@@ -150,7 +155,7 @@ describe("getAvailableCommands", () => {
 
 describe("startGame", () => {
   it("moves from IDLE to INTRO with round 1, the session settings, injected ids and no votes", () => {
-    // HOST_FIRST (not the service default) proves the setting is taken over, not assumed.
+    // HOST_FIRST and INCLUDE_SHARED_CHAT (not the service defaults) prove the settings are taken over, not assumed.
     const result = startGame(initialGameState, deck, makeSettings(3), makeDependencies(0.3));
 
     expect(result).toEqual({
@@ -165,6 +170,7 @@ describe("startGame", () => {
           hostParticipantId: HOST_PARTICIPANT_ID,
           votes: [],
           revealOrder: "HOST_FIRST",
+          sharedChatVotingMode: "INCLUDE_SHARED_CHAT",
         },
         currentRound: { id: "id-2", number: 1, question: deck.questions[1] },
       },

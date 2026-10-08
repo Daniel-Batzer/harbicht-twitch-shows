@@ -61,7 +61,13 @@
   gap: 20px;
 }
 
-.revealOrder {
+// The per-game settings of the start form, one fieldset each.
+.startSettings {
+  display: grid;
+  gap: 16px;
+}
+
+.choice {
   padding: 16px 20px 20px;
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -70,7 +76,7 @@
   border-radius: $radius-card;
 }
 
-.revealOrderLegend {
+.choiceLegend {
   padding: 0 8px;
   color: $color-ink-muted;
   font-weight: 800;
@@ -78,7 +84,7 @@
   letter-spacing: 0.08em;
 }
 
-.revealOrderOption {
+.choiceOption {
   padding: 14px 18px;
   display: grid;
   grid-template-columns: auto 1fr;
@@ -99,12 +105,12 @@
   }
 }
 
-.revealOrderTitle {
+.choiceTitle {
   font-weight: 900;
   text-transform: uppercase;
 }
 
-.revealOrderDescription {
+.choiceDescription {
   grid-column: 2;
   color: $color-ink-muted;
   font-size: 15px;

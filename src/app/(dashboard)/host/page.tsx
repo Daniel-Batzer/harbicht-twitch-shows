@@ -1,13 +1,23 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
+import { HostAutoRefresh } from "@/features/game/components/host/HostAutoRefresh";
 import { HostPanel } from "@/features/game/components/host/HostPanel";
 import {
   DEFAULT_REVEAL_ORDER,
+  DEFAULT_SHARED_CHAT_VOTING_MODE,
   getAvailableHostCommands,
   getGameSnapshot,
   getHostRoundView,
+  isVoteSimulationEnabled,
 } from "@/features/game/services/game-service";
-import { castHostVoteAction, castSimulatedVoteAction, runHostCommandAction, simulateRandomVotesAction } from "./actions";
+import { getTwitchStatusView } from "@/features/twitch/twitch-connection";
+import {
+  castHostVoteAction,
+  castSimulatedVoteAction,
+  disconnectTwitchAction,
+  runHostCommandAction,
+  simulateRandomVotesAction,
+} from "./actions";
 
 export const metadata: Metadata = {
   title: "Host · Harbicht Twitch Shows",
@@ -20,17 +30,26 @@ export default async function HostPage() {
   const snapshot = getGameSnapshot();
   const hostRound = getHostRoundView();
   const availableCommands = getAvailableHostCommands();
+  const twitchStatus = getTwitchStatusView();
 
   return (
-    <HostPanel
-      snapshot={snapshot}
-      hostRound={hostRound}
-      availableCommands={availableCommands}
-      defaultRevealOrder={DEFAULT_REVEAL_ORDER}
-      onCommand={runHostCommandAction}
-      onHostVote={castHostVoteAction}
-      onSimulatedVote={castSimulatedVoteAction}
-      onRandomVotes={simulateRandomVotesAction}
-    />
+    <>
+      {/* Chat votes arrive without a host action, so the page refreshes itself. */}
+      <HostAutoRefresh />
+      <HostPanel
+        snapshot={snapshot}
+        hostRound={hostRound}
+        availableCommands={availableCommands}
+        defaultRevealOrder={DEFAULT_REVEAL_ORDER}
+        defaultSharedChatVotingMode={DEFAULT_SHARED_CHAT_VOTING_MODE}
+        twitchStatus={twitchStatus}
+        isVoteSimulationEnabled={isVoteSimulationEnabled}
+        onCommand={runHostCommandAction}
+        onHostVote={castHostVoteAction}
+        onSimulatedVote={castSimulatedVoteAction}
+        onRandomVotes={simulateRandomVotesAction}
+        onTwitchDisconnect={disconnectTwitchAction}
+      />
+    </>
   );
 }

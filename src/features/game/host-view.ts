@@ -1,5 +1,5 @@
 import { findParticipantVote, getRoundVotes } from "../voting/domain/vote";
-import type { GameState, RevealOrder } from "./domain/game-state";
+import type { GameState, RevealOrder, SharedChatVotingMode } from "./domain/game-state";
 
 // HOST-ONLY view of the current round. Unlike the public GameSnapshot it may
 // contain data that must stay hidden from the overlay while voting runs (the
@@ -14,6 +14,8 @@ export type HostRoundView = {
   hostOptionId: string | null;
   /** The session's reveal order, so the host knows what REVEAL will uncover before it happens. */
   revealOrder: RevealOrder;
+  /** Whether chat votes from Shared Chat partner channels count in this session. */
+  sharedChatVotingMode: SharedChatVotingMode;
 };
 
 /** Available in every round phase; null only when no round is in progress (IDLE, FINISHED). */
@@ -26,5 +28,6 @@ export function toHostRoundView(state: GameState): HostRoundView | null {
     voteCount: getRoundVotes(session.votes, currentRound.id).length,
     hostOptionId: hostVote?.optionId ?? null,
     revealOrder: session.revealOrder,
+    sharedChatVotingMode: session.sharedChatVotingMode,
   };
 }
