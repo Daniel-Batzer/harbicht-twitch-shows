@@ -1250,7 +1250,7 @@ END_GAME: any running state (including FINISHED) → IDLE
 ## Revisit When
 
 - PREPARE has real content (deck or round-count choice).
-- Timers (Phase 6) or reveal choreography (Phase 4) add automatic transitions.
+- ~~Timers (Phase 6) or reveal choreography (Phase 4) add automatic transitions.~~ Phase 4 added none (Decision 045). Phase 6 adds exactly one: the voting timer locks VOTING → LOCKED at its deadline (Decision 047). REVEAL → RESULT stays manual.
 - Votes (Phase 3) need a round history beyond `playedQuestionIds`. (Phase 3 did not need one: votes carry their `roundId`, see Decision 043.)
 
 ---
@@ -1430,9 +1430,63 @@ Phase 5 connects Twitch chat as the first real vote source. Chat votes enter the
 
 - Deployment (Phase 15): serverless hosting, an unauthenticated `/host`, and a worker for the connection lifecycle.
 - Persistence (Phase 7): whether tokens should survive restarts.
-- Timers (Phase 6): a grace period for chat votes typed just before locking.
+- ~~Timers (Phase 6): a grace period for chat votes typed just before locking.~~ Done in Decision 047: a timed round accepts votes for a grace period after the countdown ends. A manual lock stays immediate.
 - A realtime transport (Phase 11) replaces the host auto-refresh and the overlay polling.
 - The first long playtest shows whether a subscription survives the access token's expiry (the hourly validation and refresh keep a valid token ready either way).
+
+---
+
+# Decision 047 – Voting Timer
+
+## Status
+
+Accepted
+
+## Decision
+
+Phase 6 makes the voting timer real (Decision 016). A game can run with or without a timer, and the host keeps manual control either way.
+
+- **Configuration:** the host picks the timer per game on the `/host` start form, like the reveal order: no timer (preselected, the host locks by hand), 30, 60 or 90 seconds, or a custom whole number of seconds from 10 to 600. The session stores `votingDurationSeconds` (`null` = no timer) and keeps it for every round. The domain only requires a positive whole number or `null` (`INVALID_VOTING_DURATION`). The presets and the custom range belong to the form and are validated with Zod at the boundary (`src/features/game/voting-duration-input.ts`). A per-round override is deferred.
+- **Model:** when voting opens, the round gets a `VotingTimer { durationSeconds, startedAtMs, endsAtMs, closesAtMs }` with absolute times in server epoch milliseconds (`src/features/game/domain/voting-timer.ts`). `endsAtMs` is where the countdown shows zero. `closesAtMs = endsAtMs + grace` is the authoritative logical deadline: from that instant on, voting counts as closed. The grace period (`VOTE_GRACE_PERIOD_MS = 3000` in the service) is stored in the session when the game starts. The round also records `votingClosedBy: "HOST" | "TIMER"`.
+- **Expiry locks voting automatically.** This is the only automatic transition in the game, VOTING → LOCKED. There is no new state: the grace period is still VOTING. REVEAL stays a manual host step.
+- **Lock rule, deterministic:** a vote counts if and only if the round is VOTING and the server received it before `closesAtMs` (strictly). `castVote` takes a `VoteReceipt { receivedAtMs, castAt }`. Both values come from one reading of the server clock in the service. The deadline check uses `receivedAtMs` directly and never parses `castAt`. A vote at or after `closesAtMs` fails with `VOTING_DEADLINE_PASSED` and leaves the viewer's earlier vote alone. A manual `LOCK_VOTING` is immediate, without a grace period (as in Phase 5).
+- **Authoritative time:** the Next.js server's `Date.now()`, read only in the application layer and passed into the domain (`nowMs`, `VoteReceipt`). The domain never reads the clock. Browser clocks (host, OBS) only render. Twitch's `message_timestamp` is not used: it is another machine's clock, and processing order still decides "latest" (Decision 043).
+- **Lazy settlement, no server timer:** nothing is scheduled, so the in-memory state is not changed at `closesAtMs` itself when nothing touches the server then. `closesAtMs` is the logical deadline. The stored VOTING → LOCKED transition is materialized on the next service access: `settleVotingDeadline(state, nowMs)` moves an expired round to LOCKED (`TIMER`), and the service runs it on every read and write (`readCurrentGameState`), before snapshots, host views, commands and votes, and stores the result. Because settlement runs before vote processing, every vote received at or after `closesAtMs` is rejected, however long the state stayed VOTING in memory. Every observer sees LOCKED for any access at or after the deadline. HMR, reloads or a closed host tab cannot lose or duplicate the transition. Reading the public snapshot may therefore write the store. That is intended: it only materializes a transition whose deadline is already fixed.
+- **Stop timer:** `STOP_VOTING_TIMER` removes the round's timer, and voting then stays open until the host locks it. It is only valid while the countdown is still running (`nowMs < endsAtMs`). From the countdown's end on, the deadline is committed and the command fails with `VOTING_TIMER_EXPIRED`, even though the grace period still accepts votes. `getAvailableCommands(state, nowMs)` offers it only in that window. The host panel hides the button once its own countdown shows zero.
+- **Snapshot:** VOTING carries `votingTimer: { durationSeconds, startedAtMs, endsAtMs } | null`. LOCKED carries `votingClosedBy`. `closesAtMs` and the grace period are never published. These fields are static within a round, so the overlay's unchanged-snapshot check still prevents re-renders per poll.
+- **Three separate kinds of time:**
+
+| | Where | Clock | Can change game state |
+|---|---|---|---|
+| Game timing | `VotingTimer`, `settleVotingDeadline`, the `castVote` check | server epoch ms | yes, only VOTING → LOCKED |
+| Countdown rendering | `voting-countdown.ts`, `useVotingCountdown`, `VotingCountdown`, `HostVotingCountdown` | viewer's clock | no, never sends a command |
+| Reveal choreography | `REVEAL_TIMING`, `getRoundPresentation` (Decision 045) | seconds since the phase arrived | no, unchanged |
+
+- **Overlay:** a round countdown badge in the top-right corner while a timed round votes. It is derived from `endsAtMs` and the overlay's clock, so a reload resumes at the right time. The ring drains per tick, the last 10 seconds turn urgent with a pulse, and at zero it shows "Time!". The cards only dim and the banner only changes when the LOCKED snapshot arrives after the grace period, and then the banner says "Time's up!" (`TIMER`) or "Voting closed" (`HOST`). The chat hint stays while votes still count.
+- **Host:** countdown, "Lock voting now" and "Stop timer" while a timed round votes. "Locked by the timer" or "Locked by you" in LOCKED. A Lock click that arrives after the timer has locked shows "Time was already up, voting is locked." The host UI never locks by itself.
+
+## Reason
+
+- The roadmap requires that expiry locks voting and that the host keeps manual control. Auto-lock plus early lock, Stop timer and a no-timer mode covers both.
+- Viewers see the overlay with stream delay, and chat messages take time to arrive. A short grace period that is only part of the timer keeps the countdown fair, and an announced deadline makes it predictable. A manual lock was not announced, so a grace period there would only make the Lock button feel delayed.
+- Absolute deadlines plus settlement on read keep the domain pure and testable, need no background job, and survive every client and dev-server event that a `setTimeout` would not.
+
+## Alternatives
+
+- Expiry only signals the host, who locks by hand: does not meet the roadmap criterion.
+- A server `setTimeout` per round: has to be cancelled on lock, stop and end, and can be lost or duplicated by HMR.
+- Locking from the client when its countdown reaches zero: makes a browser's clock authoritative and depends on a page being open.
+- A grace period for manual locks: would need a pending-lock state or a Lock button that does not lock right away.
+- Twitch message timestamps for fairness: depends on clock skew between Twitch and this server.
+- Correcting the viewer's clock against the server's: not needed while everything runs locally or NTP-synced. Clock skew only affects the display, never the outcome. If it is ever needed, add a response header such as `x-server-time-ms`, not a snapshot field, so polls stay deduplicated.
+
+## Revisit When
+
+- A playtest shows that 3 s of grace is too short for the stream's latency mode (Twitch "Normal latency" adds several seconds).
+- The host wants a different timer per round, more time, or pause/resume.
+- Deployment (Phase 15) puts the server and OBS on different clocks.
+- A realtime transport (Phase 11) shortens the delay between the lock and the overlay showing it.
+- Sound (ARCHITECTURE §24) needs countdown cues; they should read `COUNTDOWN_PRESENTATION`, not `REVEAL_TIMING`.
 
 ---
 

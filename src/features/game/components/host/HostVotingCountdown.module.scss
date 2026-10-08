@@ -1,0 +1,69 @@
+@use "sass:list";
+@use "../../../../styles/tokens" as *;
+@use "host-button";
+
+$calm-color: list.nth($answer-slot-colors, 2);
+$urgent-color: list.nth($answer-slot-colors, 1);
+
+.countdown {
+  --countdown-color: #{$calm-color};
+
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "value bar  stop"
+    "value note stop";
+  column-gap: 20px;
+  row-gap: 8px;
+  align-items: center;
+  border: 2px solid var(--countdown-color);
+  border-radius: $radius-card;
+  background: $color-night-raised;
+
+  &[data-urgent="true"],
+  &[data-expired="true"] {
+    --countdown-color: #{$urgent-color};
+  }
+}
+
+.value {
+  grid-area: value;
+  min-width: 3.5ch;
+  color: var(--countdown-color);
+  font-size: 44px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+}
+
+.bar {
+  grid-area: bar;
+  height: 12px;
+  overflow: hidden;
+  border-radius: $radius-pill;
+  background: $color-night;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--countdown-color);
+  transform-origin: left center;
+  // One tick of the countdown hook; the bar drains smoothly between ticks.
+  transition: scale 200ms linear;
+}
+
+.note {
+  grid-area: note;
+  color: $color-ink-muted;
+  font-size: 15px;
+}
+
+.stopButton {
+  @include host-button.host-button;
+  grid-area: stop;
+  background: $color-night;
+  border: 2px solid $color-gold;
+  color: $color-gold;
+}

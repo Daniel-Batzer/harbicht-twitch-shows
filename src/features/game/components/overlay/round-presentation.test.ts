@@ -87,7 +87,7 @@ describe("getRoundPresentation", () => {
     });
 
     it("shows open cards while voting runs", () => {
-      const presentation = getRoundPresentation({ status: "VOTING", round });
+      const presentation = getRoundPresentation({ status: "VOTING", round, votingTimer: null });
       expect(presentation.banner).toEqual({
         lead: { text: "Voting open", tone: "teal", effect: "PULSE" },
         payoff: null,
@@ -99,11 +99,28 @@ describe("getRoundPresentation", () => {
     });
 
     it("dims every card once voting is locked", () => {
-      const presentation = getRoundPresentation({ status: "LOCKED", round });
+      const presentation = getRoundPresentation({ status: "LOCKED", round, votingClosedBy: "HOST" });
       expect(presentation.banner?.lead.text).toBe("Voting closed");
       for (const entry of cardsOf(presentation)) {
         expect(entry.focusSteps).toEqual([{ at: 0, focus: "LOCKED" }]);
       }
+    });
+
+    it("shouts that time is up when the timer locked voting, with the same dimmed cards", () => {
+      const byTimer = getRoundPresentation({ status: "LOCKED", round, votingClosedBy: "TIMER" });
+      const byHost = getRoundPresentation({ status: "LOCKED", round, votingClosedBy: "HOST" });
+
+      expect(byTimer.banner).toEqual({ lead: { text: "Time's up!", tone: "orange", effect: "SHAKE" }, payoff: null });
+      expect(byTimer.cards).toEqual(byHost.cards);
+    });
+
+    // The countdown is its own presentation (voting-countdown.ts); it never feeds the reveal choreography.
+    it("presents a timed voting round exactly like an untimed one", () => {
+      const votingTimer = { durationSeconds: 30, startedAtMs: 1_000_000, endsAtMs: 1_030_000 };
+
+      expect(getRoundPresentation({ status: "VOTING", round, votingTimer })).toEqual(
+        getRoundPresentation({ status: "VOTING", round, votingTimer: null }),
+      );
     });
   });
 

@@ -2,6 +2,7 @@ import type { QuestionOption } from "../questions/domain/question";
 import { tallyVotes } from "../voting/domain/tally-votes";
 import { findParticipantVote, getRoundVotes } from "../voting/domain/vote";
 import type { GameState, RevealOrder, RoundInProgressState } from "./domain/game-state";
+import type { VotingClosedBy, VotingTimer } from "./domain/voting-timer";
 
 // Plain JSON view of the game shared by /host and /overlay. This is the
 // contract that survives a future transport change (Decision 041): only how
@@ -11,6 +12,8 @@ import type { GameState, RevealOrder, RoundInProgressState } from "./domain/game
 // before REVEAL (Decision 015). REVEAL uncovers either the audience result or
 // the host's choice, depending on the session's reveal order; RESULT carries
 // both (Decision 044). Host-only data lives in host-view.ts.
+// The voting timer is public while voting runs (Decision 047), except for its
+// grace period: closesAtMs is never published.
 
 export type QuestionSnapshot = {
   id: string;
@@ -47,9 +50,14 @@ export type HostPickSnapshot = {
   optionId: string | null;
 };
 
+/** The countdown the overlay and the host render. Times are server epoch ms. */
+export type VotingTimerSnapshot = Pick<VotingTimer, "durationSeconds" | "startedAtMs" | "endsAtMs">;
+
 export type GameSnapshot =
   | { status: "IDLE" }
-  | { status: "INTRO" | "VOTING" | "LOCKED"; round: RoundSnapshot }
+  | { status: "INTRO"; round: RoundSnapshot }
+  | { status: "VOTING"; round: RoundSnapshot; votingTimer: VotingTimerSnapshot | null }
+  | { status: "LOCKED"; round: RoundSnapshot; votingClosedBy: VotingClosedBy }
   | { status: "REVEAL"; revealOrder: "AUDIENCE_FIRST"; round: RoundSnapshot; result: RoundResultSnapshot }
   | { status: "REVEAL"; revealOrder: "HOST_FIRST"; round: RoundSnapshot; host: HostPickSnapshot }
   | {
@@ -118,9 +126,26 @@ export function toGameSnapshot(state: GameState, presentation: SnapshotPresentat
 
     // Voting is open or just closed: no totals, no host choice.
     case "INTRO":
-    case "VOTING":
+      return { status: "INTRO", round: toRoundSnapshot(state) };
+
+    case "VOTING": {
+      const timer = state.currentRound.votingTimer;
+      return {
+        status: "VOTING",
+        round: toRoundSnapshot(state),
+        votingTimer: timer
+          ? { durationSeconds: timer.durationSeconds, startedAtMs: timer.startedAtMs, endsAtMs: timer.endsAtMs }
+          : null,
+      };
+    }
+
     case "LOCKED":
-      return { status: state.status, round: toRoundSnapshot(state) };
+      return {
+        status: "LOCKED",
+        round: toRoundSnapshot(state),
+        // Every way into LOCKED sets it; HOST is the safe reading of a missing value.
+        votingClosedBy: state.currentRound.votingClosedBy ?? "HOST",
+      };
 
     // The first half of the outcome, depending on the reveal order.
     case "REVEAL": {

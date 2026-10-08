@@ -169,7 +169,10 @@ function getBanner(snapshot: RoundPhaseSnapshot, beats: RevealBeats): BannerPres
     case "VOTING":
       return { lead: { text: "Voting open", tone: "teal", effect: "PULSE" }, payoff: null };
     case "LOCKED":
-      return { lead: { text: "Voting closed", tone: "muted", effect: "NONE" }, payoff: null };
+      // Who closed voting is part of the snapshot; the timer's deadline itself never reaches this module.
+      return snapshot.votingClosedBy === "TIMER"
+        ? { lead: { text: "Time's up!", tone: "orange", effect: "SHAKE" }, payoff: null }
+        : { lead: { text: "Voting closed", tone: "muted", effect: "NONE" }, payoff: null };
 
     case "REVEAL": {
       if (snapshot.revealOrder === "AUDIENCE_FIRST") {

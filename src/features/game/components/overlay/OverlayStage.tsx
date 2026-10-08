@@ -10,6 +10,7 @@ import { FinishedCard } from "./FinishedCard";
 import { PhaseBanner } from "./PhaseBanner";
 import { QuestionCard } from "./QuestionCard";
 import { getRoundPresentation } from "./round-presentation";
+import { VotingCountdown } from "./VotingCountdown";
 import styles from "./OverlayStage.module.scss";
 
 // Reference canvas for OBS (Decision 006). The stage is laid out at this size
@@ -49,6 +50,10 @@ function RoundStage({ snapshot }: { snapshot: RoundPhaseSnapshot }) {
       {presentation.cards && <AnswerCards cards={presentation.cards} />}
       <AnimatePresence>
         {snapshot.status === "VOTING" && <ChatVoteHint optionCount={snapshot.round.question.options.length} />}
+      </AnimatePresence>
+      {/* Leaves when the host stops the timer or the server locks voting (Decision 047). */}
+      <AnimatePresence>
+        {snapshot.status === "VOTING" && snapshot.votingTimer && <VotingCountdown timer={snapshot.votingTimer} />}
       </AnimatePresence>
     </>
   );

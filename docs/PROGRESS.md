@@ -141,4 +141,32 @@ Pending:
 - Manual test on the own channel (stream can be offline): Connect, `!vote` from a second account, host dashboard vote + own `!vote` = one host vote, invalid and late votes, Wi-Fi off → reconnect, Disconnect, `next build && next start` hides the simulated viewers.
 - Manual OBS check (see Slice 1).
 
-Next: Motion follow-up for the question card and round transitions, or Phase 6 timer and host control improvements.
+## Phase 6 / Slice 6 – Voting Timer and Round Controls
+
+Status: **implemented, manual playtest and OBS check pending**
+
+Done (Decision 047):
+
+- Per-game voting timer on the `/host` start form: no timer (preselected), 30 / 60 / 90 s, or custom 10–600 s. Zod-validated at the boundary (`voting-duration-input.ts`), `INVALID_VOTING_DURATION` otherwise.
+- Domain `voting-timer.ts`: absolute deadlines (`startedAtMs`, `endsAtMs`, `closesAtMs = endsAtMs + 3 s grace`) in server time, `settleVotingDeadline` for the one automatic transition VOTING → LOCKED, `votingClosedBy: HOST | TIMER` on the round. No new state, no server timer.
+- `castVote` takes a `VoteReceipt { receivedAtMs, castAt }` from one reading of the server clock. A vote counts only if `receivedAtMs < closesAtMs` (`VOTING_DEADLINE_PASSED` otherwise). Manual lock stays immediate.
+- `STOP_VOTING_TIMER`: the host can turn a timed round into a manual one, but only before the countdown ends (`VOTING_TIMER_EXPIRED` from then on, also enforced in `getAvailableCommands(state, nowMs)`).
+- Service: every read and write settles the deadline first (`readCurrentGameState`). `closesAtMs` is the logical deadline. The stored VOTING → LOCKED transition is materialized on the next service access, so no page has to be polling. Any vote received at or after `closesAtMs` is rejected, because settlement runs before vote processing. Chat, host and simulated votes all go through it. The Twitch adapter is unchanged.
+- Snapshot: `votingTimer` (without the grace period) in VOTING, `votingClosedBy` in LOCKED. Static per round, so the overlay's poll deduplication still holds.
+- `/overlay`: countdown badge with a draining ring, urgent pulse for the last 10 s, "Time!" at zero, and a "Time's up!" banner once the timer has locked. Reloads resume the countdown from `endsAtMs`.
+- `/host`: countdown with bar, "Lock voting now", "Stop timer" (hidden at zero), "Locked by the timer / by you", the timer setting in the round info, and a clear message when a Lock click comes after the timer.
+- Tests: timer arithmetic and the exact lock boundary, settlement (same object before, LOCKED at `closesAtMs`, idempotent, no timer, other states), Stop timer before/at/after `endsAtMs` with no mutation on rejection, `getAvailableCommands` consistency at four points in time, votes in and after the grace period (incl. chat votes and "receive time, not castAt"), snapshot visibility, form parsing, countdown display, LOCKED banner and a check that a timed VOTING round presents exactly like an untimed one.
+
+Known limitations:
+
+- The overlay shows LOCKED up to ~1 s after `closesAtMs` (polling). Between "Time!" and the dimmed cards are about 3–4 s: votes still count during that time.
+- 3 s of grace covers Twitch low-latency streams. With normal latency, viewers who vote at their own "1 s left" may still be too late.
+- Browser clocks are assumed to be NTP-synced with the server (no offset correction). Skew only shifts the countdown display.
+- Timer setting is per game only; no per-round override, extend or pause.
+
+Pending:
+
+- Manual playtest: no timer; 30 s timer to expiry (host + overlay in sync, "Time!", lock with "Time's up!"); a vote in the grace period and one after it (simulated and `!vote`); early lock; Stop timer, then a long wait without auto-lock; overlay reload during the countdown and after expiry; host tab in the background; Lock click just after the auto-lock; custom 9 / 601 rejected.
+- Manual OBS check (see Slice 1).
+
+Next: Motion follow-up for the question card and round transitions, or Phase 7 persistence.

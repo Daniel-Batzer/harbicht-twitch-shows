@@ -116,6 +116,22 @@
   font-size: 15px;
 }
 
+// Five choices: no timer, three presets and a custom value.
+.timerChoice {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.secondsInput {
+  width: 5ch;
+  padding: 2px 6px;
+  border: 2px solid $color-ink-muted;
+  border-radius: 8px;
+  background: $color-night;
+  color: $color-ink;
+  font: inherit;
+  font-weight: 800;
+}
+
 .controls {
   display: flex;
   align-items: center;
@@ -197,6 +213,12 @@
   display: grid;
   gap: 6px;
   font-size: 18px;
+}
+
+.lockedNote {
+  margin-top: 8px;
+  color: list.nth($answer-slot-colors, 3);
+  font-weight: 800;
 }
 
 .roundLabel + .hint {

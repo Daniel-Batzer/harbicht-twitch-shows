@@ -619,6 +619,14 @@ RESULT
 
 Animations should follow domain state rather than creating independent hidden business logic inside animation components.
 
+The voting countdown (Decision 047) follows this rule too. The overlay renders it from the snapshot's `votingTimer.endsAtMs` and its own clock. Reaching zero on screen changes nothing. Voting closes logically at the server's deadline (`closesAtMs`, countdown end plus a grace period). The server materializes the LOCKED state on its next access, and the lock visuals wait for the LOCKED snapshot. Three kinds of time stay separate:
+
+```text
+game timing          VotingTimer in the domain state, server clock, closesAtMs is the deadline; VOTING → LOCKED is materialized on the next service access
+countdown rendering  voting-countdown.ts + useVotingCountdown, viewer clock, display only
+reveal choreography  REVEAL_TIMING (Decision 045), seconds since the phase arrived, display only
+```
+
 ---
 
 ## 23. Styling

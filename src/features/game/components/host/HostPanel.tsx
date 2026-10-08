@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import clsx from "clsx";
 import { TwitchConnectionPanel } from "../../../twitch/components/TwitchConnectionPanel";
 import type { TwitchStatusView } from "../../../twitch/twitch-connection";
 import {
@@ -13,8 +14,15 @@ import {
 } from "../../domain/game-state";
 import { getRevealedResult, type GameSnapshot, type RoundPhaseSnapshot } from "../../game-snapshot";
 import type { HostRoundView } from "../../host-view";
+import {
+  CUSTOM_VOTING_DURATION_LIMITS,
+  CUSTOM_VOTING_TIMER,
+  NO_VOTING_TIMER,
+  VOTING_DURATION_PRESETS,
+} from "../../voting-duration-input";
 import { HostResultSummary } from "./HostResultSummary";
 import { HostVoteControls } from "./HostVoteControls";
+import { HostVotingCountdown } from "./HostVotingCountdown";
 import { SimulatedVotesPanel } from "./SimulatedVotesPanel";
 import type { HostVoteAction } from "./vote-feedback";
 import styles from "./HostPanel.module.scss";
@@ -41,6 +49,8 @@ type HostPanelProps = {
   defaultRevealOrder: RevealOrder;
   /** Preselected when a new game is started. */
   defaultSharedChatVotingMode: SharedChatVotingMode;
+  /** Preselected when a new game is started; null means no timer. */
+  defaultVotingDurationSeconds: number | null;
   twitchStatus: TwitchStatusView;
   /** DEV: the simulated-viewer controls exist only in development. */
   isVoteSimulationEnabled: boolean;
@@ -55,6 +65,7 @@ const commandLabels: Record<GameCommand, string> = {
   START_GAME: "Start game",
   OPEN_VOTING: "Open voting",
   LOCK_VOTING: "Lock voting",
+  STOP_VOTING_TIMER: "Stop timer",
   REVEAL_RESULT: "Reveal",
   SHOW_RESULT: "Show result",
   START_NEXT_ROUND: "Start next round",
@@ -151,6 +162,82 @@ function SharedChatModePicker({ defaultMode }: { defaultMode: SharedChatVotingMo
   );
 }
 
+/** The custom value prefilled when the default duration is not one of the presets. */
+const FALLBACK_CUSTOM_SECONDS = 45;
+
+/**
+ * Part of the start form, like the reveal order: every round of the game uses
+ * this timer (Decision 047). The server validates the custom value.
+ */
+function VotingTimerPicker({ defaultDurationSeconds }: { defaultDurationSeconds: number | null }) {
+  const isPreset = VOTING_DURATION_PRESETS.some((seconds) => seconds === defaultDurationSeconds);
+  const defaultChoice =
+    defaultDurationSeconds === null
+      ? NO_VOTING_TIMER
+      : isPreset
+        ? String(defaultDurationSeconds)
+        : CUSTOM_VOTING_TIMER;
+  const { minSeconds, maxSeconds } = CUSTOM_VOTING_DURATION_LIMITS;
+  const defaultCustomSeconds =
+    defaultChoice === CUSTOM_VOTING_TIMER && defaultDurationSeconds !== null
+      ? defaultDurationSeconds
+      : FALLBACK_CUSTOM_SECONDS;
+
+  return (
+    <fieldset className={clsx(styles.choice, styles.timerChoice)}>
+      <legend className={styles.choiceLegend}>Voting timer</legend>
+      <label className={styles.choiceOption}>
+        <input
+          type="radio"
+          name="votingTimer"
+          value={NO_VOTING_TIMER}
+          defaultChecked={defaultChoice === NO_VOTING_TIMER}
+        />
+        <span className={styles.choiceTitle}>No timer</span>
+        <span className={styles.choiceDescription}>You lock voting by hand.</span>
+      </label>
+      {VOTING_DURATION_PRESETS.map((seconds) => (
+        <label key={seconds} className={styles.choiceOption}>
+          <input
+            type="radio"
+            name="votingTimer"
+            value={String(seconds)}
+            defaultChecked={defaultChoice === String(seconds)}
+          />
+          <span className={styles.choiceTitle}>{seconds} s</span>
+          <span className={styles.choiceDescription}>Locks when time runs out.</span>
+        </label>
+      ))}
+      <label className={styles.choiceOption}>
+        <input
+          type="radio"
+          name="votingTimer"
+          value={CUSTOM_VOTING_TIMER}
+          defaultChecked={defaultChoice === CUSTOM_VOTING_TIMER}
+        />
+        <span className={styles.choiceTitle}>Custom</span>
+        <span className={styles.choiceDescription}>
+          <input
+            className={styles.secondsInput}
+            type="number"
+            name="customVotingSeconds"
+            inputMode="numeric"
+            defaultValue={defaultCustomSeconds}
+            aria-label="Custom voting duration in seconds"
+          />{" "}
+          s ({minSeconds}–{maxSeconds})
+        </span>
+      </label>
+    </fieldset>
+  );
+}
+
+function describeVotingTimer(votingDurationSeconds: number | null): string {
+  return votingDurationSeconds === null
+    ? "no timer, you lock voting by hand"
+    : `${votingDurationSeconds} s, then voting locks automatically`;
+}
+
 /**
  * The host sees the audience result at the same moment as the overlay, so the
  * reveal is a surprise for them too. Until then they only see their own vote.
@@ -200,9 +287,19 @@ function HostRoundOutcome({
 function describeFailure(failure: HostActionFailure): string {
   switch (failure.reason) {
     case "INVALID_TRANSITION":
+      // Most likely the timer locked voting between the last refresh and the click (Decision 047).
+      if (failure.from === "LOCKED" && (failure.command === "LOCK_VOTING" || failure.command === "STOP_VOTING_TIMER")) {
+        return "Time was already up, voting is locked.";
+      }
       return `“${commandLabels[failure.command]}” is not possible while the game is ${failure.from}. The panel now shows the current state.`;
     case "INVALID_TOTAL_ROUNDS":
       return "The configured number of rounds is invalid.";
+    case "INVALID_VOTING_DURATION": {
+      const { minSeconds, maxSeconds } = CUSTOM_VOTING_DURATION_LIMITS;
+      return `Choose a voting timer. A custom timer needs whole seconds from ${minSeconds} to ${maxSeconds}.`;
+    }
+    case "VOTING_TIMER_EXPIRED":
+      return "The countdown has already run out, so the timer can no longer be stopped. Voting locks in a moment.";
     case "NO_ROUNDS_REMAINING":
       return "That was the last round. Finish the game instead.";
     case "NOT_ENOUGH_QUESTIONS":
@@ -222,6 +319,7 @@ export function HostPanel({
   availableCommands,
   defaultRevealOrder,
   defaultSharedChatVotingMode,
+  defaultVotingDurationSeconds,
   twitchStatus,
   isVoteSimulationEnabled,
   onCommand,
@@ -232,6 +330,7 @@ export function HostPanel({
 }: HostPanelProps) {
   const [feedback, commandAction, isPending] = useActionState(onCommand, null);
   const controls = arrangeHostControls(availableCommands);
+  const votingTimer = snapshot.status === "VOTING" ? snapshot.votingTimer : null;
 
   return (
     <main className={styles.panel}>
@@ -250,7 +349,15 @@ export function HostPanel({
           <div className={styles.startSettings}>
             <RevealOrderPicker defaultRevealOrder={defaultRevealOrder} />
             <SharedChatModePicker defaultMode={defaultSharedChatVotingMode} />
+            <VotingTimerPicker defaultDurationSeconds={defaultVotingDurationSeconds} />
           </div>
+        )}
+        {votingTimer && (
+          <HostVotingCountdown
+            timer={votingTimer}
+            canStopTimer={availableCommands.includes("STOP_VOTING_TIMER")}
+            isPending={isPending}
+          />
         )}
         <div className={styles.controls}>
           <div className={styles.primarySlot}>
@@ -262,7 +369,9 @@ export function HostPanel({
                 value={controls.primary}
                 disabled={isPending}
               >
-                {commandLabels[controls.primary]}
+                {controls.primary === "LOCK_VOTING" && votingTimer
+                  ? "Lock voting now"
+                  : commandLabels[controls.primary]}
               </button>
             )}
             {controls.finishEarly && (
@@ -314,7 +423,13 @@ export function HostPanel({
             {hostRound && (
               <p className={styles.hint}>
                 Reveal order: {revealOrderLabels[hostRound.revealOrder]}. Shared Chat:{" "}
-                {sharedChatModeLabels[hostRound.sharedChatVotingMode]}.
+                {sharedChatModeLabels[hostRound.sharedChatVotingMode]}. Voting timer:{" "}
+                {describeVotingTimer(hostRound.votingDurationSeconds)}.
+              </p>
+            )}
+            {snapshot.status === "LOCKED" && (
+              <p className={styles.lockedNote}>
+                {snapshot.votingClosedBy === "TIMER" ? "Locked by the timer." : "Locked by you."}
               </p>
             )}
 

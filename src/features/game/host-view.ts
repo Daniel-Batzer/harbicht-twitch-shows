@@ -16,6 +16,8 @@ export type HostRoundView = {
   revealOrder: RevealOrder;
   /** Whether chat votes from Shared Chat partner channels count in this session. */
   sharedChatVotingMode: SharedChatVotingMode;
+  /** The session's voting duration; null when the host locks by hand. */
+  votingDurationSeconds: number | null;
 };
 
 /** Available in every round phase; null only when no round is in progress (IDLE, FINISHED). */
@@ -29,5 +31,6 @@ export function toHostRoundView(state: GameState): HostRoundView | null {
     hostOptionId: hostVote?.optionId ?? null,
     revealOrder: session.revealOrder,
     sharedChatVotingMode: session.sharedChatVotingMode,
+    votingDurationSeconds: session.votingDurationSeconds,
   };
 }

@@ -5,6 +5,7 @@ import { HostPanel } from "@/features/game/components/host/HostPanel";
 import {
   DEFAULT_REVEAL_ORDER,
   DEFAULT_SHARED_CHAT_VOTING_MODE,
+  DEFAULT_VOTING_DURATION_SECONDS,
   getAvailableHostCommands,
   getGameSnapshot,
   getHostRoundView,
@@ -42,6 +43,7 @@ export default async function HostPage() {
         availableCommands={availableCommands}
         defaultRevealOrder={DEFAULT_REVEAL_ORDER}
         defaultSharedChatVotingMode={DEFAULT_SHARED_CHAT_VOTING_MODE}
+        defaultVotingDurationSeconds={DEFAULT_VOTING_DURATION_SECONDS}
         twitchStatus={twitchStatus}
         isVoteSimulationEnabled={isVoteSimulationEnabled}
         onCommand={runHostCommandAction}

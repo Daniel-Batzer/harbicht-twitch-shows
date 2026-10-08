@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Question } from "../questions/domain/question";
 import type { Vote } from "../voting/domain/vote";
-import type { GameSession } from "./domain/game-state";
+import type { CurrentRound, GameSession } from "./domain/game-state";
 import { toHostRoundView } from "./host-view";
 
 const question: Question = {
@@ -26,6 +26,8 @@ const session: GameSession = {
   hostParticipantId: "local:host",
   revealOrder: "AUDIENCE_FIRST",
   sharedChatVotingMode: "OWN_CHANNEL_ONLY",
+  votingDurationSeconds: 60,
+  voteGracePeriodMs: 3000,
   votes: [
     makeVote("local:host", "a", "r1"), // earlier round, must not count
     makeVote("local:sim-viewer-1", "b", "r1"),
@@ -34,29 +36,35 @@ const session: GameSession = {
   ],
 };
 
+function roundOf(id: string, number: number): CurrentRound {
+  return { id, number, question, votingTimer: null, votingClosedBy: null };
+}
+
 describe("toHostRoundView", () => {
   it.each(["INTRO", "VOTING", "LOCKED", "REVEAL", "RESULT"] as const)(
     "reports the current round's vote count and the host's choice in %s",
     (status) => {
-      const view = toHostRoundView({ status, session, currentRound: { id: "r2", number: 2, question } });
+      const view = toHostRoundView({ status, session, currentRound: roundOf("r2", 2) });
 
       expect(view).toEqual({
         voteCount: 2,
         hostOptionId: "b",
         revealOrder: "AUDIENCE_FIRST",
         sharedChatVotingMode: "OWN_CHANNEL_ONLY",
+        votingDurationSeconds: 60,
       });
     },
   );
 
   it("reports no host choice when the host has not voted in the current round", () => {
-    const view = toHostRoundView({ status: "VOTING", session, currentRound: { id: "r3", number: 3, question } });
+    const view = toHostRoundView({ status: "VOTING", session, currentRound: roundOf("r3", 3) });
 
     expect(view).toEqual({
       voteCount: 0,
       hostOptionId: null,
       revealOrder: "AUDIENCE_FIRST",
       sharedChatVotingMode: "OWN_CHANNEL_ONLY",
+      votingDurationSeconds: 60,
     });
   });
 

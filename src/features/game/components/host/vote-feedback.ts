@@ -12,6 +12,8 @@ export function describeVoteFailure(failure: HostVoteFailure): string {
   switch (failure.reason) {
     case "VOTING_NOT_OPEN":
       return `Votes are only accepted while voting is open. The game is ${failure.status}.`;
+    case "VOTING_DEADLINE_PASSED":
+      return "Time is up. Votes no longer count this round.";
     case "INVALID_OPTION":
       return "That answer is not part of the current question. The panel now shows the current round.";
     case "INVALID_VOTE_INPUT":

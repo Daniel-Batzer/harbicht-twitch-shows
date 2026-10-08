@@ -1,6 +1,13 @@
 import type { Deck, Question } from "../../questions/domain/question";
 import { selectRandomQuestion } from "../../questions/domain/select-random-question";
 import type { ParticipantId, Vote } from "../../voting/domain/vote";
+import {
+  createVotingTimer,
+  hasCountdownEnded,
+  isValidVotingDuration,
+  type VotingClosedBy,
+  type VotingTimer,
+} from "./voting-timer";
 
 // The game flow as an explicit state machine (Decision 028, Decision 042):
 //
@@ -10,6 +17,9 @@ import type { ParticipantId, Vote } from "../../voting/domain/vote";
 //
 // Every transition is a pure function that either returns the next state or a
 // failure. A failed transition never mutates the given state.
+// The voting timer (Decision 047) adds no state: it can only move VOTING to
+// LOCKED, through settleVotingDeadline in voting-timer.ts. Transitions that
+// depend on time get the current server time as `nowMs`.
 // PREPARE is deferred until the session has something to prepare (deck or
 // round-count selection).
 
@@ -54,12 +64,20 @@ export type GameSession = {
   revealOrder: RevealOrder;
   /** Fixed for the whole session. */
   sharedChatVotingMode: SharedChatVotingMode;
+  /** Voting duration of every round in this session; null means no timer (the host locks by hand). */
+  votingDurationSeconds: number | null;
+  /** How long after the countdown ends late votes still count. Fixed for the whole session. */
+  voteGracePeriodMs: number;
 };
 
 export type CurrentRound = {
   id: string;
   number: number;
   question: Question;
+  /** Set when voting opens with a timer; null in INTRO, without a timer, and after the host stopped it. */
+  votingTimer: VotingTimer | null;
+  /** Set when the round moves to LOCKED. */
+  votingClosedBy: VotingClosedBy | null;
 };
 
 export type RoundInProgressState = { status: RoundPhase; session: GameSession; currentRound: CurrentRound };
@@ -71,6 +89,7 @@ export const GAME_COMMANDS = [
   "START_GAME",
   "OPEN_VOTING",
   "LOCK_VOTING",
+  "STOP_VOTING_TIMER",
   "REVEAL_RESULT",
   "SHOW_RESULT",
   "START_NEXT_ROUND",
@@ -83,8 +102,10 @@ export type GameCommand = (typeof GAME_COMMANDS)[number];
 export type TransitionFailure =
   | { reason: "INVALID_TRANSITION"; command: GameCommand; from: GameStatus }
   | { reason: "INVALID_TOTAL_ROUNDS" }
+  | { reason: "INVALID_VOTING_DURATION" }
   | { reason: "NO_ROUNDS_REMAINING" }
-  | { reason: "NOT_ENOUGH_QUESTIONS" };
+  | { reason: "NOT_ENOUGH_QUESTIONS" }
+  | { reason: "VOTING_TIMER_EXPIRED" };
 
 export type TransitionResult = { ok: true; state: GameState } | { ok: false; failure: TransitionFailure };
 
@@ -99,9 +120,16 @@ export type GameSettings = {
   hostParticipantId: ParticipantId;
   revealOrder: RevealOrder;
   sharedChatVotingMode: SharedChatVotingMode;
+  votingDurationSeconds: number | null;
+  voteGracePeriodMs: number;
 };
 
-export type GameCommandContext = RoundDependencies & GameSettings & { deck: Deck };
+export type GameCommandContext = RoundDependencies &
+  GameSettings & {
+    deck: Deck;
+    /** The current server time (epoch ms), read once by the caller for this command. */
+    nowMs: number;
+  };
 
 export const initialGameState: GameState = { status: "IDLE" };
 
@@ -113,6 +141,10 @@ function hasRoundsRemaining(state: RoundInProgressState): boolean {
   return state.currentRound.number < state.session.totalRounds;
 }
 
+function newRound(id: string, number: number, question: Question): CurrentRound {
+  return { id, number, question, votingTimer: null, votingClosedBy: null };
+}
+
 export function startGame(
   state: GameState,
   deck: Deck,
@@ -121,9 +153,19 @@ export function startGame(
 ): TransitionResult {
   if (state.status !== "IDLE") return invalidTransition(state, "START_GAME");
 
-  const { totalRounds, hostParticipantId, revealOrder, sharedChatVotingMode } = settings;
+  const {
+    totalRounds,
+    hostParticipantId,
+    revealOrder,
+    sharedChatVotingMode,
+    votingDurationSeconds,
+    voteGracePeriodMs,
+  } = settings;
   if (!Number.isInteger(totalRounds) || totalRounds < 1) {
     return { ok: false, failure: { reason: "INVALID_TOTAL_ROUNDS" } };
+  }
+  if (!isValidVotingDuration(votingDurationSeconds)) {
+    return { ok: false, failure: { reason: "INVALID_VOTING_DURATION" } };
   }
   // Every round needs its own question (no repeats within a session).
   if (deck.questions.length < totalRounds) return { ok: false, failure: { reason: "NOT_ENOUGH_QUESTIONS" } };
@@ -144,20 +186,47 @@ export function startGame(
         votes: [],
         revealOrder,
         sharedChatVotingMode,
+        votingDurationSeconds,
+        voteGracePeriodMs,
       },
-      currentRound: { id: dependencies.createId(), number: 1, question },
+      currentRound: newRound(dependencies.createId(), 1, question),
     },
   };
 }
 
-export function openVoting(state: GameState): TransitionResult {
+/** Starts the session's voting timer, if it has one, at `nowMs`. */
+export function openVoting(state: GameState, nowMs: number): TransitionResult {
   if (state.status !== "INTRO") return invalidTransition(state, "OPEN_VOTING");
-  return { ok: true, state: { ...state, status: "VOTING" } };
+
+  const { votingDurationSeconds, voteGracePeriodMs } = state.session;
+  const votingTimer =
+    votingDurationSeconds === null ? null : createVotingTimer(votingDurationSeconds, voteGracePeriodMs, nowMs);
+  return { ok: true, state: { ...state, status: "VOTING", currentRound: { ...state.currentRound, votingTimer } } };
 }
 
+/** The host closes voting by hand. This takes effect at once, without a grace period. */
 export function lockVoting(state: GameState): TransitionResult {
   if (state.status !== "VOTING") return invalidTransition(state, "LOCK_VOTING");
-  return { ok: true, state: { ...state, status: "LOCKED" } };
+  return {
+    ok: true,
+    state: { ...state, status: "LOCKED", currentRound: { ...state.currentRound, votingClosedBy: "HOST" } },
+  };
+}
+
+/**
+ * The host takes over: the round keeps voting until they lock it by hand.
+ * Only possible while the countdown is still running. Once it has reached
+ * zero the deadline is committed, even though the grace period still accepts
+ * votes until closesAtMs.
+ */
+export function stopVotingTimer(state: GameState, nowMs: number): TransitionResult {
+  if (state.status !== "VOTING" || !state.currentRound.votingTimer) {
+    return invalidTransition(state, "STOP_VOTING_TIMER");
+  }
+  if (hasCountdownEnded(state.currentRound.votingTimer, nowMs)) {
+    return { ok: false, failure: { reason: "VOTING_TIMER_EXPIRED" } };
+  }
+  return { ok: true, state: { ...state, currentRound: { ...state.currentRound, votingTimer: null } } };
 }
 
 export function revealResult(state: GameState): TransitionResult {
@@ -184,7 +253,7 @@ export function startNextRound(state: GameState, deck: Deck, dependencies: Round
     state: {
       status: "INTRO",
       session: { ...session, playedQuestionIds: [...session.playedQuestionIds, question.id] },
-      currentRound: { id: dependencies.createId(), number: currentRound.number + 1, question },
+      currentRound: newRound(dependencies.createId(), currentRound.number + 1, question),
     },
   };
 }
@@ -202,18 +271,21 @@ export function endGame(state: GameState): TransitionResult {
 }
 
 /**
- * The commands that are valid from the given state: the transition table in
- * readable form. START_GAME can still fail on its settings or deck.
+ * The commands that are valid from the given state at `nowMs`: the transition
+ * table in readable form. START_GAME can still fail on its settings or deck.
  * Tests check that this agrees with the guards of the functions above.
  */
-export function getAvailableCommands(state: GameState): GameCommand[] {
+export function getAvailableCommands(state: GameState, nowMs: number): GameCommand[] {
   switch (state.status) {
     case "IDLE":
       return ["START_GAME"];
     case "INTRO":
       return ["OPEN_VOTING", "END_GAME"];
-    case "VOTING":
-      return ["LOCK_VOTING", "END_GAME"];
+    case "VOTING": {
+      const timer = state.currentRound.votingTimer;
+      const canStopTimer = timer !== null && !hasCountdownEnded(timer, nowMs);
+      return canStopTimer ? ["LOCK_VOTING", "STOP_VOTING_TIMER", "END_GAME"] : ["LOCK_VOTING", "END_GAME"];
+    }
     case "LOCKED":
       return ["REVEAL_RESULT", "END_GAME"];
     case "REVEAL":
@@ -238,13 +310,17 @@ export function applyGameCommand(state: GameState, command: GameCommand, context
           hostParticipantId: context.hostParticipantId,
           revealOrder: context.revealOrder,
           sharedChatVotingMode: context.sharedChatVotingMode,
+          votingDurationSeconds: context.votingDurationSeconds,
+          voteGracePeriodMs: context.voteGracePeriodMs,
         },
         context,
       );
     case "OPEN_VOTING":
-      return openVoting(state);
+      return openVoting(state, context.nowMs);
     case "LOCK_VOTING":
       return lockVoting(state);
+    case "STOP_VOTING_TIMER":
+      return stopVotingTimer(state, context.nowMs);
     case "REVEAL_RESULT":
       return revealResult(state);
     case "SHOW_RESULT":

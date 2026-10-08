@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Question } from "../questions/domain/question";
 import type { Vote } from "../voting/domain/vote";
 import type { CurrentRound, GameSession, RevealOrder, RoundPhase } from "./domain/game-state";
+import { createVotingTimer } from "./domain/voting-timer";
 import { toGameSnapshot } from "./game-snapshot";
 
 const question: Question = {
@@ -14,7 +15,7 @@ const question: Question = {
   ],
 };
 
-const currentRound: CurrentRound = { id: "r2", number: 2, question };
+const currentRound: CurrentRound = { id: "r2", number: 2, question, votingTimer: null, votingClosedBy: null };
 const presentation = { hostDisplayName: "Louis" };
 
 function makeVote(participantId: string, optionId: string, roundId = "r2"): Vote {
@@ -40,6 +41,8 @@ function makeSession(revealOrder: RevealOrder, sessionVotes: Vote[] = votes): Ga
     votes: sessionVotes,
     revealOrder,
     sharedChatVotingMode: "OWN_CHANNEL_ONLY",
+    votingDurationSeconds: null,
+    voteGracePeriodMs: 3000,
   };
 }
 
@@ -72,12 +75,54 @@ describe("toGameSnapshot", () => {
   });
 
   describe.each(REVEAL_ORDERS)("before the reveal (%s)", (revealOrder) => {
-    it.each(["INTRO", "VOTING", "LOCKED"] as const)("maps %s to the round view only, without any vote data", (status) => {
-      const snapshot = snapshotIn(status, makeSession(revealOrder));
+    it.each([
+      { status: "INTRO", expected: { status: "INTRO", round: roundSnapshot } },
+      { status: "VOTING", expected: { status: "VOTING", round: roundSnapshot, votingTimer: null } },
+      { status: "LOCKED", expected: { status: "LOCKED", round: roundSnapshot, votingClosedBy: "HOST" } },
+    ] as const)("maps $status to the round view only, without any vote data", ({ status, expected }) => {
+      const round = status === "LOCKED" ? { ...currentRound, votingClosedBy: "HOST" as const } : currentRound;
+      const snapshot = toGameSnapshot({ status, session: makeSession(revealOrder), currentRound: round }, presentation);
 
-      expect(snapshot).toEqual({ status, round: roundSnapshot });
+      expect(snapshot).toEqual(expected);
       // Results stay hidden while voting is open or just closed (Decision 015).
-      expect(JSON.stringify(snapshot)).not.toMatch(/vote|result|host|louis/i);
+      // `votingClosedBy: "HOST"` says who locked, not what the host picked.
+      const withoutClosedBy = "votingClosedBy" in snapshot ? { ...snapshot, votingClosedBy: undefined } : snapshot;
+      expect(JSON.stringify(withoutClosedBy)).not.toMatch(/vote|result|host|louis/i);
+    });
+  });
+
+  describe("voting timer", () => {
+    const timer = createVotingTimer(60, 3000, 1_000_000);
+
+    it("publishes the countdown while voting runs, but not the grace period", () => {
+      const snapshot = toGameSnapshot(
+        {
+          status: "VOTING",
+          session: makeSession("AUDIENCE_FIRST"),
+          currentRound: { ...currentRound, votingTimer: timer },
+        },
+        presentation,
+      );
+
+      expect(snapshot).toEqual({
+        status: "VOTING",
+        round: roundSnapshot,
+        votingTimer: { durationSeconds: 60, startedAtMs: 1_000_000, endsAtMs: 1_060_000 },
+      });
+      expect(JSON.stringify(snapshot)).not.toMatch(/closesAt|grace/i);
+    });
+
+    it("says when the timer locked voting", () => {
+      const snapshot = toGameSnapshot(
+        {
+          status: "LOCKED",
+          session: makeSession("AUDIENCE_FIRST"),
+          currentRound: { ...currentRound, votingTimer: timer, votingClosedBy: "TIMER" },
+        },
+        presentation,
+      );
+
+      expect(snapshot).toEqual({ status: "LOCKED", round: roundSnapshot, votingClosedBy: "TIMER" });
     });
   });
 

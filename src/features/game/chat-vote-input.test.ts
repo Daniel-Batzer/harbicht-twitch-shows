@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Question } from "../questions/domain/question";
 import { toChatVoteInput, type ChatVote } from "./chat-vote-input";
-import { castVote } from "./domain/cast-vote";
+import { castVote, type VoteReceipt } from "./domain/cast-vote";
 import { lockVoting, type GameSession, type GameState, type RoundPhase } from "./domain/game-state";
+import { createVotingTimer, settleVotingDeadline, type VotingTimer } from "./domain/voting-timer";
 
 const question: Question = {
   id: "q1",
@@ -26,11 +27,21 @@ function makeSession(hostParticipantId: string): GameSession {
     votes: [],
     revealOrder: "AUDIENCE_FIRST",
     sharedChatVotingMode: "OWN_CHANNEL_ONLY",
+    votingDurationSeconds: null,
+    voteGracePeriodMs: 3000,
   };
 }
 
-function roundState(status: RoundPhase, hostParticipantId = BROADCASTER): GameState {
-  return { status, session: makeSession(hostParticipantId), currentRound: { id: "r1", number: 1, question } };
+function roundState(
+  status: RoundPhase,
+  hostParticipantId = BROADCASTER,
+  votingTimer: VotingTimer | null = null,
+): GameState {
+  return {
+    status,
+    session: makeSession(hostParticipantId),
+    currentRound: { id: "r1", number: 1, question, votingTimer, votingClosedBy: null },
+  };
 }
 
 function chatVote(participantId: string, optionNumber: number): ChatVote {
@@ -85,12 +96,13 @@ describe("toChatVoteInput", () => {
 
 describe("chat votes through castVote", () => {
   const CAST_AT = "2026-10-08T12:00:00.000Z";
+  const RECEIPT: VoteReceipt = { receivedAtMs: Date.parse(CAST_AT), castAt: CAST_AT };
 
   /** What the application does for one chat message: resolve, then let the domain decide. */
-  function castChat(state: GameState, vote: ChatVote): GameState {
+  function castChat(state: GameState, vote: ChatVote, receipt = RECEIPT): GameState {
     const resolved = toChatVoteInput(state, vote, BROADCASTER);
     if (!resolved.ok) return state;
-    const result = castVote(state, resolved.input, CAST_AT);
+    const result = castVote(state, resolved.input, receipt);
     return result.ok ? result.state : state;
   }
 
@@ -103,7 +115,7 @@ describe("chat votes through castVote", () => {
     const afterDashboard = castVote(
       roundState("VOTING", "local:host"),
       { participantId: "local:host", optionId: "q1-a", source: "HOST" },
-      CAST_AT,
+      RECEIPT,
     );
     if (!afterDashboard.ok) throw new Error("expected the dashboard vote to succeed");
 
@@ -136,9 +148,35 @@ describe("chat votes through castVote", () => {
     const resolved = toChatVoteInput(locked.state, chatVote("twitch:42", 2), BROADCASTER);
     if (!resolved.ok) throw new Error("expected the option number to resolve");
 
-    expect(castVote(locked.state, resolved.input, CAST_AT)).toEqual({
+    expect(castVote(locked.state, resolved.input, RECEIPT)).toEqual({
       ok: false,
       failure: { reason: "VOTING_NOT_OPEN", status: "LOCKED" },
+    });
+  });
+
+  describe("around the voting timer's deadline", () => {
+    // The service settles the deadline with the receive time, then lets castVote decide (Decision 047).
+    const timer = createVotingTimer(30, 3000, Date.parse(CAST_AT));
+    const timedVoting = roundState("VOTING", BROADCASTER, timer);
+
+    function castChatReceivedAt(state: GameState, vote: ChatVote, receivedAtMs: number): GameState {
+      const receipt: VoteReceipt = { receivedAtMs, castAt: new Date(receivedAtMs).toISOString() };
+      return castChat(settleVotingDeadline(state, receivedAtMs), vote, receipt);
+    }
+
+    it("counts a chat vote that arrives during the grace period", () => {
+      const state = castChatReceivedAt(timedVoting, chatVote("twitch:42", 2), timer.endsAtMs + 2000);
+
+      expect(votesOf(state)).toEqual([expect.objectContaining({ participantId: "twitch:42", optionId: "q1-b" })]);
+    });
+
+    it("rejects a chat vote that arrives at the lock and keeps the viewer's earlier vote", () => {
+      const afterVote = castChatReceivedAt(timedVoting, chatVote("twitch:42", 1), timer.startedAtMs);
+
+      const afterLate = castChatReceivedAt(afterVote, chatVote("twitch:42", 3), timer.closesAtMs);
+
+      expect(afterLate.status).toBe("LOCKED");
+      expect(votesOf(afterLate)).toEqual([expect.objectContaining({ participantId: "twitch:42", optionId: "q1-a" })]);
     });
   });
 });

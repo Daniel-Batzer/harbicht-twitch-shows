@@ -13,6 +13,7 @@ import {
   simulateRandomVotes,
   type GameCommandOptions,
 } from "@/features/game/services/game-service";
+import { parseVotingDurationInput } from "@/features/game/voting-duration-input";
 import { disconnectTwitch } from "@/features/twitch/twitch-connection";
 
 // A Server Action is a public endpoint, so form input is validated at this
@@ -40,13 +41,22 @@ export async function runHostCommandAction(
 
   const command = parsedCommand.data;
   let options: GameCommandOptions = {};
-  // Reveal order and Shared Chat mode are chosen per game, so only the start form sends them.
+  // Reveal order, Shared Chat mode and voting timer are chosen per game, so only the start form sends them.
   if (command === "START_GAME") {
     const parsedRevealOrder = revealOrderSchema.safeParse(formData.get("revealOrder"));
     if (!parsedRevealOrder.success) return { failure: { reason: "INVALID_REVEAL_ORDER" } };
     const parsedSharedChatMode = sharedChatVotingModeSchema.safeParse(formData.get("sharedChatVotingMode"));
     if (!parsedSharedChatMode.success) return { failure: { reason: "INVALID_SHARED_CHAT_MODE" } };
-    options = { revealOrder: parsedRevealOrder.data, sharedChatVotingMode: parsedSharedChatMode.data };
+    const parsedVotingDuration = parseVotingDurationInput(
+      formData.get("votingTimer"),
+      formData.get("customVotingSeconds"),
+    );
+    if (!parsedVotingDuration.ok) return { failure: { reason: "INVALID_VOTING_DURATION" } };
+    options = {
+      revealOrder: parsedRevealOrder.data,
+      sharedChatVotingMode: parsedSharedChatMode.data,
+      votingDurationSeconds: parsedVotingDuration.votingDurationSeconds,
+    };
   }
 
   const result = runGameCommand(command, options);
